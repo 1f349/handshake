@@ -79,10 +79,12 @@ func getSigData(t *testing.T, d *SigData) []byte {
 }
 
 func damageBytes(bts []byte) []byte {
+	nBts := make([]byte, len(bts))
+	copy(nBts, bts)
 	if len(bts) > 12 {
-		bts[11] = ^bts[11]
+		nBts[11] = ^bts[11]
 	}
-	return bts
+	return nBts
 }
 
 func damageMeta(d *SigData) *SigData {
