@@ -5,6 +5,7 @@ package packets
 import (
 	"bytes"
 	"errors"
+	"hash"
 	"io"
 	"math"
 	"sync"
@@ -19,7 +20,10 @@ type PacketPayload interface {
 	io.WriterTo
 	io.ReaderFrom
 	Size() uint
-	//TODO: Add hmac calculation (Via return a valid instance) and hmac receiver for support in marshal only
+	// MarshalHashCalculator is nil when not supported, provides a way of hashing the packet header and body while marshalling
+	MarshalHashCalculator() hash.Hash
+	// SetCompleteHash is called once marshaling is complete and MarshalHashCalculator returned a valid hash instance
+	SetCompleteHash([]byte)
 }
 
 type PacketMarshaller struct {
@@ -88,6 +92,14 @@ func (p *PacketMarshaller) Marshal(packetHeader PacketHeader, payload PacketPayl
 		} else {
 			sz := payload.Size()
 			var pw *packetFragmentWriter
+			pHasher := payload.MarshalHashCalculator()
+			if pHasher != nil {
+				pHasher.Reset()
+				_, err := packetHeader.Clone().WriteTo(pHasher)
+				if err != nil {
+					return err
+				}
+			}
 			if sz+HeaderSize <= p.MTU {
 				pw = &packetFragmentWriter{target: p.Conn, header: *packetHeader.Clone(), mtu: p.MTU}
 			} else {
@@ -100,7 +112,13 @@ func (p *PacketMarshaller) Marshal(packetHeader PacketHeader, payload PacketPayl
 				}
 				pw = &packetFragmentWriter{target: p.Conn, header: *packetHeader.CloneAsFragment(0, byte(fc), uint16(p.MTU-HeaderSizeForFragmentation)), mtu: p.MTU, fragmentWrite: true}
 			}
-			_, err := payload.WriteTo(pw)
+			var pwa io.Writer
+			if pHasher == nil {
+				pwa = pw
+			} else {
+				pwa = io.MultiWriter(pw, pHasher)
+			}
+			_, err := payload.WriteTo(pwa)
 			if err != nil {
 				return err
 			}
@@ -111,15 +129,29 @@ func (p *PacketMarshaller) Marshal(packetHeader PacketHeader, payload PacketPayl
 			if err != nil {
 				return err
 			}
+			if pHasher != nil {
+				payload.SetCompleteHash(pHasher.Sum(nil))
+			}
 		}
 	} else {
-		_, err := packetHeader.Clone().WriteTo(p.Conn)
+		var pwa io.Writer
+		pHasher := payload.MarshalHashCalculator()
+		if pHasher == nil {
+			pwa = p.Conn
+		} else {
+			pHasher.Reset()
+			pwa = io.MultiWriter(p.Conn, pHasher)
+		}
+		_, err := packetHeader.Clone().WriteTo(pwa)
 		if err != nil {
 			return err
 		}
-		_, err = payload.WriteTo(p.Conn)
+		_, err = payload.WriteTo(pwa)
 		if err != nil {
 			return err
+		}
+		if pHasher != nil {
+			payload.SetCompleteHash(pHasher.Sum(nil))
 		}
 	}
 	return nil

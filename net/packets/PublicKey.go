@@ -5,6 +5,7 @@ package packets
 import (
 	"github.com/1f349/handshake/crypto"
 	intbyteutils "github.com/1f349/int-byte-utils"
+	"hash"
 	"io"
 )
 
@@ -13,6 +14,13 @@ const PublicKeyDataPacketType = PacketType(6)
 type PublicKeyPayload struct {
 	Data []byte
 	key  crypto.KemPublicKey
+}
+
+func (p *PublicKeyPayload) MarshalHashCalculator() hash.Hash {
+	return nil
+}
+
+func (p *PublicKeyPayload) SetCompleteHash([]byte) {
 }
 
 func (p *PublicKeyPayload) WriteTo(w io.Writer) (n int64, err error) {

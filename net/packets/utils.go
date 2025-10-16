@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"errors"
 	intbyteutils "github.com/1f349/int-byte-utils"
+	"hash"
 	"io"
 	"time"
 )
@@ -155,4 +156,20 @@ func GetUUID() [16]byte {
 
 func MilliTime(t time.Time) time.Time {
 	return time.UnixMilli(t.UnixMilli())
+}
+
+func PacketDataHash(packetHeader PacketHeader, payload PacketPayload, h hash.Hash) []byte {
+	if payload == nil || h == nil {
+		return nil
+	}
+	h.Reset()
+	_, err := packetHeader.Clone().WriteTo(h)
+	if err != nil {
+		return nil
+	}
+	_, err = payload.WriteTo(h)
+	if err != nil {
+		return nil
+	}
+	return h.Sum(nil)
 }

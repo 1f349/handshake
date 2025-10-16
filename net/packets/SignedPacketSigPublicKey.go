@@ -5,6 +5,7 @@ package packets
 import (
 	"github.com/1f349/handshake/crypto"
 	intbyteutils "github.com/1f349/int-byte-utils"
+	"hash"
 	"io"
 )
 
@@ -13,6 +14,13 @@ const SignedPacketSigPublicKeyPacketType = PacketType(10)
 type SignedPacketSigPublicKeyPayload struct {
 	Data []byte
 	key  crypto.SigPublicKey
+}
+
+func (p *SignedPacketSigPublicKeyPayload) MarshalHashCalculator() hash.Hash {
+	return nil
+}
+
+func (p *SignedPacketSigPublicKeyPayload) SetCompleteHash([]byte) {
 }
 
 func (p *SignedPacketSigPublicKeyPayload) WriteTo(w io.Writer) (n int64, err error) {

@@ -3,6 +3,7 @@
 package packets
 
 import (
+	"hash"
 	"io"
 )
 
@@ -13,6 +14,13 @@ const SignaturePublicKeyRequestPacketType = PacketType(9)
 
 // EmptyPayload Provides a payload for ConnectionRejectedPacketType, PublicKeyRequestPacketType, SignatureRequestPacketType and SignaturePublicKeyRequestPacketType
 type EmptyPayload struct {
+}
+
+func (e *EmptyPayload) MarshalHashCalculator() hash.Hash {
+	return nil
+}
+
+func (e *EmptyPayload) SetCompleteHash([]byte) {
 }
 
 func (e *EmptyPayload) WriteTo(w io.Writer) (n int64, err error) {
