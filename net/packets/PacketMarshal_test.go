@@ -6,9 +6,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"errors"
-	"github.com/1f349/pqc-handshake/crypto"
-	"github.com/cloudflare/circl/kem/mlkem/mlkem768"
-	"github.com/cloudflare/circl/sign/mldsa/mldsa44"
+	"github.com/1f349/handshake/crypto"
 	"github.com/stretchr/testify/assert"
 	"io"
 	"slices"
@@ -43,7 +41,7 @@ func sharedPacketMarshalTest(t *testing.T, transport io.ReadWriter, mtu uint) {
 	testOnePayload(t, marshal, PacketHeader{ID: SignatureRequestPacketType, ConnectionUUID: connection, Time: pt}, ValidEmptyPayload, emptyPayloadChecker)
 	testOnePayload(t, marshal, PacketHeader{ID: SignaturePublicKeyRequestPacketType, ConnectionUUID: connection, Time: pt}, ValidEmptyPayload, emptyPayloadChecker)
 	testOnePayload(t, marshal, PacketHeader{ID: PublicKeyDataPacketType, ConnectionUUID: connection, Time: pt}, GetValidPublicKeyPayload(), func(o PacketPayload, r PacketPayload) bool {
-		k, err := r.(*PublicKeyPayload).Load(crypto.WrapKem(mlkem768.Scheme()))
+		k, err := r.(*PublicKeyPayload).Load(crypto.RSAKem4096Scheme)
 		if err != nil || k == nil {
 			return false
 		}
@@ -54,14 +52,14 @@ func sharedPacketMarshalTest(t *testing.T, transport io.ReadWriter, mtu uint) {
 		return ko.Equals(k)
 	})
 	testOnePayload(t, marshal, PacketHeader{ID: PublicKeyDataPacketType, ConnectionUUID: connection, Time: pt}, GetInvalidPublicKeyPayload(), func(o PacketPayload, r PacketPayload) bool {
-		k, err := r.(*PublicKeyPayload).Load(crypto.WrapKem(mlkem768.Scheme()))
+		k, err := r.(*PublicKeyPayload).Load(crypto.RSAKem4096Scheme)
 		if err != nil && k == nil {
 			return true
 		}
 		return false
 	})
 	testOnePayload(t, marshal, PacketHeader{ID: SignedPacketSigPublicKeyPacketType, ConnectionUUID: connection, Time: pt}, GetValidSignedPacketSigPublicKeyPayload(), func(o PacketPayload, r PacketPayload) bool {
-		k, err := r.(*SignedPacketSigPublicKeyPayload).Load(crypto.WrapSig(mldsa44.Scheme()))
+		k, err := r.(*SignedPacketSigPublicKeyPayload).Load(crypto.RSASig4096Scheme)
 		if err != nil || k == nil {
 			return false
 		}
@@ -72,7 +70,7 @@ func sharedPacketMarshalTest(t *testing.T, transport io.ReadWriter, mtu uint) {
 		return ko.Equals(k)
 	})
 	testOnePayload(t, marshal, PacketHeader{ID: SignedPacketSigPublicKeyPacketType, ConnectionUUID: connection, Time: pt}, GetInvalidSignedPacketSigPublicKeyPayload(), func(o PacketPayload, r PacketPayload) bool {
-		k, err := r.(*SignedPacketSigPublicKeyPayload).Load(crypto.WrapSig(mldsa44.Scheme()))
+		k, err := r.(*SignedPacketSigPublicKeyPayload).Load(crypto.RSASig4096Scheme)
 		if err != nil && k == nil {
 			return true
 		}

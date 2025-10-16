@@ -4,8 +4,7 @@ package packets
 
 import (
 	"bytes"
-	"github.com/1f349/pqc-handshake/crypto"
-	"github.com/cloudflare/circl/sign/mldsa/mldsa44"
+	"github.com/1f349/handshake/crypto"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
@@ -16,7 +15,7 @@ var invalidSignedPacketSigPublicKeyPayload *SignedPacketSigPublicKeyPayload = ni
 func GetValidSignedPacketSigPublicKeyPayload() *SignedPacketSigPublicKeyPayload {
 	if validSignedPacketSigPublicKeyPayload == nil {
 		validSignedPacketSigPublicKeyPayload = &SignedPacketSigPublicKeyPayload{}
-		scheme := crypto.WrapSig(mldsa44.Scheme())
+		scheme := crypto.RSASig4096Scheme
 		k, _, err := scheme.GenerateKeyPair()
 		if err != nil {
 			panic(err)
@@ -50,7 +49,7 @@ func TestValidSignedPacketSigPublicKeyPayload(t *testing.T) {
 	assert.NoError(t, err)
 	assert.GreaterOrEqual(t, n, int64(0))
 	assert.Equal(t, payload.Size(), uint(n))
-	k, err := rPayload.Load(crypto.WrapSig(mldsa44.Scheme()))
+	k, err := rPayload.Load(crypto.RSASig4096Scheme)
 	assert.NoError(t, err)
 	assert.NotNil(t, k)
 	ko, err := payload.Load(nil)
@@ -73,7 +72,7 @@ func TestInvalidSignedPacketSigPublicKeyPayload(t *testing.T) {
 	assert.NoError(t, err)
 	assert.GreaterOrEqual(t, n, int64(0))
 	assert.Equal(t, payload.Size(), uint(n))
-	k, err := rPayload.Load(crypto.WrapSig(mldsa44.Scheme()))
+	k, err := rPayload.Load(crypto.RSASig4096Scheme)
 	assert.Error(t, err)
 	assert.Nil(t, k)
 }

@@ -4,9 +4,7 @@ package cmd
 
 import (
 	"crypto/sha256"
-	"github.com/1f349/pqc-handshake/crypto"
-	"github.com/cloudflare/circl/kem/mlkem/mlkem768"
-	"github.com/cloudflare/circl/sign/mldsa/mldsa44"
+	"github.com/1f349/handshake/crypto"
 	"github.com/stretchr/testify/assert"
 	"hash"
 	"os"
@@ -17,13 +15,13 @@ import (
 
 func TestMainSignKey(t *testing.T) {
 	dir := t.TempDir()
-	kemScheme := crypto.WrapKem(mlkem768.Scheme())
+	kemScheme := crypto.RSAKem4096Scheme
 	ekp, _, err := kemScheme.GenerateKeyPair()
 	assert.NoError(t, err)
 	ekpBts, err := ekp.MarshalBinary()
 	assert.NoError(t, err)
 	assert.NoError(t, os.WriteFile(dir+"/epubkey", ekpBts, 0644))
-	sigScheme := crypto.WrapSig(mldsa44.Scheme())
+	sigScheme := crypto.RSASig4096Scheme
 	kp, k, err := sigScheme.GenerateKeyPair()
 	assert.NoError(t, err)
 	kBts, err := k.MarshalBinary()

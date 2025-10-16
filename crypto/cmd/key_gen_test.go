@@ -3,9 +3,7 @@
 package cmd
 
 import (
-	"github.com/1f349/pqc-handshake/crypto"
-	"github.com/cloudflare/circl/kem/mlkem/mlkem768"
-	"github.com/cloudflare/circl/sign/mldsa/mldsa44"
+	"github.com/1f349/handshake/crypto"
 	"github.com/stretchr/testify/assert"
 	"io"
 	"os"
@@ -28,13 +26,13 @@ type keyGenTest interface {
 type keyGenTestKem struct{}
 
 func (k keyGenTestKem) Main(buildName, buildDate, buildVersion, buildAuthor, buildLicense string, exit func(code int), stdout *os.File, stdin *os.File) {
-	mainKegGenKem(crypto.WrapKem(mlkem768.Scheme()), buildName, buildDate, buildVersion, buildAuthor, buildLicense, exit, stdout, stdin)
+	mainKegGenKem(crypto.RSAKem4096Scheme, buildName, buildDate, buildVersion, buildAuthor, buildLicense, exit, stdout, stdin)
 }
 
 type keyGenTestSig struct{}
 
 func (k keyGenTestSig) Main(buildName, buildDate, buildVersion, buildAuthor, buildLicense string, exit func(code int), stdout *os.File, stdin *os.File) {
-	mainKegGenSig(crypto.WrapSig(mldsa44.Scheme()), buildName, buildDate, buildVersion, buildAuthor, buildLicense, exit, stdout, stdin)
+	mainKegGenSig(crypto.RSASig4096Scheme, buildName, buildDate, buildVersion, buildAuthor, buildLicense, exit, stdout, stdin)
 }
 
 func genericTest(t *testing.T, test keyGenTest) {
@@ -112,6 +110,7 @@ func copyStdOutToIn(dir string) error {
 	}
 	defer func() { _ = o.Close() }()
 	_, err = io.Copy(o, f)
+	err = o.Sync()
 	return err
 }
 
@@ -148,5 +147,6 @@ func writeStdIn(dir string, bts []byte) error {
 	}
 	defer func() { _ = f.Close() }()
 	_, err = f.Write(bts)
+	err = f.Sync()
 	return err
 }

@@ -1,9 +1,14 @@
-# PQC Handshake
+# Handshake
 
-Provides a protocol and net implementation to use post quantum cryptographic functions to prove ownership of keys and share a session key.
+Provides a protocol and net implementation to use key encapsulation and signature functions to prove ownership of keys and share a session key.
 The architecture of the library allows for the use of the use of any compatible algorithms for key encapsulation, HMAC, hashing and signing.
 This can even include providing a capabilities packet for negotiating those aforementioned algorithms (Hence ID 0 has been reserved for this).
 Any ID 0 packets will be incompatible with the current implementation as payload length is not explicitly stored.
+Fragmentation is supported with up to 255 fragments per packet, however automatic requesting of missing fragments is not yet supported by the protocol.
+
+This library provides an RSA KEM scheme and RSA Sig Scheme wrapping ``crypto/rsa`` from the go standard library
+
+Post quantum cryptography is supported by the library through wrappers around the [github.com/cloudflare/circl](https://github.com/cloudflare/circl) package, provided by [github.com/1f349/pqc-handshake](https://github.com/1f349/pqc-handshake) .
 
 Proving key ownership is as simple as sending the encapsulated symmetric key to the other node, 
 with a HMAC of the previous packet bytes 
@@ -43,7 +48,9 @@ Where the highest bit of type denotes a fragmented packet when set and adds the 
 
 [Fragment N.o. {1 Byte}] [Fragment Count {1 Byte}] [Fragment Length {2 Byte}]
 
-All other internal fields,, that are byte arrays, 
+The Fragment Count value of 0 is reserved for future use and a value of 1 is not expected from sending implementations.
+
+All other internal fields, that are byte arrays, 
 are headed with an unsigned integer represented using the 
 [github.com/1f349/int-byte-utils](https://github.com/1f349/int-byte-utils) package
 signifying the length of the following field, where these are denoted as ([] Field), 

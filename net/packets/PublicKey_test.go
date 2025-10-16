@@ -4,8 +4,7 @@ package packets
 
 import (
 	"bytes"
-	"github.com/1f349/pqc-handshake/crypto"
-	"github.com/cloudflare/circl/kem/mlkem/mlkem768"
+	"github.com/1f349/handshake/crypto"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
@@ -16,7 +15,7 @@ var invalidPublicKeyPayload *PublicKeyPayload = nil
 func GetValidPublicKeyPayload() *PublicKeyPayload {
 	if validPublicKeyPayload == nil {
 		validPublicKeyPayload = &PublicKeyPayload{}
-		scheme := crypto.WrapKem(mlkem768.Scheme())
+		scheme := crypto.RSAKem4096Scheme
 		k, _, err := scheme.GenerateKeyPair()
 		if err != nil {
 			panic(err)
@@ -49,7 +48,7 @@ func TestValidPublicKeyPayload(t *testing.T) {
 	assert.NoError(t, err)
 	assert.GreaterOrEqual(t, n, int64(0))
 	assert.Equal(t, payload.Size(), uint(n))
-	k, err := rPayload.Load(crypto.WrapKem(mlkem768.Scheme()))
+	k, err := rPayload.Load(crypto.RSAKem4096Scheme)
 	assert.NoError(t, err)
 	assert.NotNil(t, k)
 	ko, err := payload.Load(nil)
@@ -72,7 +71,7 @@ func TestInvalidPublicKeyPayload(t *testing.T) {
 	assert.NoError(t, err)
 	assert.GreaterOrEqual(t, n, int64(0))
 	assert.Equal(t, payload.Size(), uint(n))
-	k, err := rPayload.Load(crypto.WrapKem(mlkem768.Scheme()))
+	k, err := rPayload.Load(crypto.RSAKem4096Scheme)
 	assert.Error(t, err)
 	assert.Nil(t, k)
 }

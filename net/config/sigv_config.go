@@ -3,7 +3,7 @@
 package config
 
 import (
-	"github.com/1f349/pqc-handshake/crypto"
+	"github.com/1f349/handshake/crypto"
 	"hash"
 )
 

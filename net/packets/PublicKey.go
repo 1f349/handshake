@@ -3,8 +3,8 @@
 package packets
 
 import (
+	"github.com/1f349/handshake/crypto"
 	intbyteutils "github.com/1f349/int-byte-utils"
-	"github.com/1f349/pqc-handshake/crypto"
 	"io"
 )
 

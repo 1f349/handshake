@@ -4,8 +4,6 @@ package crypto
 
 import (
 	"crypto/sha256"
-	"github.com/cloudflare/circl/kem/mlkem/mlkem768"
-	"github.com/cloudflare/circl/sign/mldsa/mldsa44"
 	"github.com/stretchr/testify/assert"
 	"hash"
 	"testing"
@@ -13,14 +11,28 @@ import (
 )
 
 func TestSigData(t *testing.T) {
+	scheme := RSASig4096Scheme
+	pk, k, err := scheme.GenerateKeyPair()
+	assert.NoError(t, err)
+	processTestSigData(t, k, pk, false)
+}
+
+func TestSigDataWrongKey(t *testing.T) {
+	scheme := RSASig4096Scheme
+	pk, _, err := scheme.GenerateKeyPair()
+	assert.NoError(t, err)
+	_, k, err := scheme.GenerateKeyPair()
+	assert.NoError(t, err)
+	assert.False(t, k.Public().Equals(pk))
+	processTestSigData(t, k, pk, true)
+}
+
+func processTestSigData(t *testing.T, k SigPrivateKey, pk SigPublicKey, allFail bool) {
 	tHash := sha256.New()
-	kScheme := WrapKem(mlkem768.Scheme())
+	kScheme := RSAKem4096Scheme
 	sk, _, err := kScheme.GenerateKeyPair()
 	assert.NoError(t, err)
 	skb, err := sk.MarshalBinary()
-	assert.NoError(t, err)
-	scheme := WrapSig(mldsa44.Scheme())
-	pk, k, err := scheme.GenerateKeyPair()
 	assert.NoError(t, err)
 	sigs := make([][]byte, 0, 9)
 	sigs = append(sigs, []byte{})                                                                                           // Empty Data
@@ -35,6 +47,11 @@ func TestSigData(t *testing.T) {
 	var results = []bool{false, false, false, false, false, false, false, true, true}
 	var hashes = []hash.Hash{nil, tHash, tHash, tHash, tHash, nil, nil, tHash, nil}
 	var name = []string{"Empty Data", "Damaged data", "Damaged meta", "Not yet valid", "Expired", "Not yet valid (Full data)", "Expired (Full data)", "Valid", "Valid (Full data)"}
+	if allFail {
+		for idx := range name {
+			name[idx] = name[idx] + " Wrong Key"
+		}
+	}
 	for idx, s := range sigs {
 		t.Run(name[idx], func(t *testing.T) {
 			sData := &SigData{PublicKey: skb}
@@ -44,7 +61,11 @@ func TestSigData(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 			}
-			assert.Equal(t, results[idx], sData.Verify(hashes[idx], pk))
+			if allFail {
+				assert.False(t, sData.Verify(hashes[idx], pk))
+			} else {
+				assert.Equal(t, results[idx], sData.Verify(hashes[idx], pk))
+			}
 		})
 	}
 }

@@ -5,9 +5,7 @@ package packets
 import (
 	"bytes"
 	"crypto/sha256"
-	"github.com/1f349/pqc-handshake/crypto"
-	"github.com/cloudflare/circl/kem/mlkem/mlkem768"
-	"github.com/cloudflare/circl/sign/mldsa/mldsa44"
+	"github.com/1f349/handshake/crypto"
 	"github.com/stretchr/testify/assert"
 	"slices"
 	"testing"
@@ -23,7 +21,7 @@ var invalidPublicKeySignedPacketPayload *PublicKeySignedPacketPayload = nil
 func GetValidPublicKeySignedPacketPayload() *PublicKeySignedPacketPayload {
 	if validPublicKeySignedPacketPayload == nil {
 		shash := sha256.New()
-		scheme := crypto.WrapKem(mlkem768.Scheme())
+		scheme := crypto.RSAKem4096Scheme
 		var err error
 		validPublicKeySignedPacketPayloadKemPubKey, _, err = scheme.GenerateKeyPair()
 		if err != nil {
@@ -33,7 +31,7 @@ func GetValidPublicKeySignedPacketPayload() *PublicKeySignedPacketPayload {
 		if err != nil {
 			panic(err)
 		}
-		sigScheme := crypto.WrapSig(mldsa44.Scheme())
+		sigScheme := crypto.RSASig4096Scheme
 		var pk crypto.SigPrivateKey
 		validPublicKeySignedPacketPayloadSigPubKey, pk, err = sigScheme.GenerateKeyPair()
 		if err != nil {
