@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"testing"
 	"time"
 )
 
@@ -18,6 +19,15 @@ const RFC3339Milli = "2006-01-02T15:04:05.000Z07:00"
 // MainSignKey provides a command for use in main for signing public kem keys using the specified crypto.SigScheme and hash.Hash
 func MainSignKey(scheme crypto.SigScheme, dataHash hash.Hash, buildName, buildDate, buildVersion, buildAuthor, buildLicense string) {
 	mainSignKey(scheme, dataHash, buildName, buildDate, buildVersion, buildAuthor, buildLicense, os.Exit, os.Stdout, os.Stdin)
+}
+
+// TestingMainSignKey provides a way of executing MainSignKey in a test environment
+func TestingMainSignKey(scheme crypto.SigScheme, dataHash hash.Hash, buildName, buildDate, buildVersion, buildAuthor, buildLicense string, exit func(code int), stdout *os.File, stdin *os.File) {
+	if !testing.Testing() {
+		exit(-1)
+		return
+	}
+	mainSignKey(scheme, dataHash, buildName, buildDate, buildVersion, buildAuthor, buildLicense, exit, stdout, stdin)
 }
 
 func mainSignKey(scheme crypto.SigScheme, dataHash hash.Hash, buildName, buildDate, buildVersion, buildAuthor, buildLicense string, exit func(code int), stdout *os.File, stdin *os.File) {

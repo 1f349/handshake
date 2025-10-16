@@ -9,11 +9,21 @@ import (
 	"log"
 	"os"
 	"strings"
+	"testing"
 )
 
 // MainKegGenSig provides a command for use in main for generating signature keys for the specified crypto.SigScheme
 func MainKegGenSig(scheme crypto.SigScheme, buildName, buildDate, buildVersion, buildAuthor, buildLicense string) {
 	mainKegGenSig(scheme, buildName, buildDate, buildVersion, buildAuthor, buildLicense, os.Exit, os.Stdout, os.Stdin)
+}
+
+// TestingMainKegGenSig provides a way of executing MainKegGenSig in a test environment
+func TestingMainKegGenSig(scheme crypto.SigScheme, buildName, buildDate, buildVersion, buildAuthor, buildLicense string, exit func(code int), stdout *os.File, stdin *os.File) {
+	if !testing.Testing() {
+		exit(-1)
+		return
+	}
+	mainKegGenSig(scheme, buildName, buildDate, buildVersion, buildAuthor, buildLicense, exit, stdout, stdin)
 }
 
 func mainKegGenSig(scheme crypto.SigScheme, buildName, buildDate, buildVersion, buildAuthor, buildLicense string, exit func(code int), stdout *os.File, stdin *os.File) {

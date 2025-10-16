@@ -8,11 +8,21 @@ import (
 	"log"
 	"os"
 	"strings"
+	"testing"
 )
 
 // MainKegGenKem provides a command for use in main for generating encapsulation keys for the specified crypto.KemScheme
 func MainKegGenKem(scheme crypto.KemScheme, buildName, buildDate, buildVersion, buildAuthor, buildLicense string) {
 	mainKegGenKem(scheme, buildName, buildDate, buildVersion, buildAuthor, buildLicense, os.Exit, os.Stdout, os.Stdin)
+}
+
+// TestingMainKegGenKem provides a way of executing MainKegGenSig in a test environment
+func TestingMainKegGenKem(scheme crypto.KemScheme, buildName, buildDate, buildVersion, buildAuthor, buildLicense string, exit func(code int), stdout *os.File, stdin *os.File) {
+	if !testing.Testing() {
+		exit(-1)
+		return
+	}
+	mainKegGenKem(scheme, buildName, buildDate, buildVersion, buildAuthor, buildLicense, exit, stdout, stdin)
 }
 
 func mainKegGenKem(scheme crypto.KemScheme, buildName, buildDate, buildVersion, buildAuthor, buildLicense string, exit func(code int), stdout *os.File, stdin *os.File) {

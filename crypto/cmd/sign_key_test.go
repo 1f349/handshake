@@ -103,17 +103,17 @@ func TestMainSignKey(t *testing.T) {
 	})
 	t.Run("Usage", func(t *testing.T) {
 		os.Args = []string{"testing"}
-		mainSignKey(sigScheme, tHash, "a", "b", "c", "d", "e", uFunc, nil, nil)
+		TestingMainSignKey(sigScheme, tHash, "a", "b", "c", "d", "e", uFunc, nil, nil)
 	})
 	t.Run("Double stdin", func(t *testing.T) {
 		os.Args = []string{"testing", "-", "-", "-"}
-		mainSignKey(sigScheme, tHash, "a", "b", "c", "d", "e", uFunc, nil, nil)
+		TestingMainSignKey(sigScheme, tHash, "a", "b", "c", "d", "e", uFunc, nil, nil)
 	})
 }
 
 func testMainSignKey(t *testing.T, dir string, sigScheme crypto.SigScheme, hashScheme hash.Hash,
 	ekp []byte, kp crypto.SigPublicKey, issue, expiry time.Time, close func(code int), stdout, stdin *os.File, delay time.Duration, failing bool) {
-	mainSignKey(sigScheme, hashScheme, "a", "b", "c", "d", "e", close, stdout, stdin)
+	TestingMainSignKey(sigScheme, hashScheme, "a", "b", "c", "d", "e", close, stdout, stdin)
 	if delay > 0 {
 		time.Sleep(delay)
 	}

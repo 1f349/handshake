@@ -26,13 +26,13 @@ type keyGenTest interface {
 type keyGenTestKem struct{}
 
 func (k keyGenTestKem) Main(buildName, buildDate, buildVersion, buildAuthor, buildLicense string, exit func(code int), stdout *os.File, stdin *os.File) {
-	mainKegGenKem(crypto.RSAKem4096Scheme, buildName, buildDate, buildVersion, buildAuthor, buildLicense, exit, stdout, stdin)
+	TestingMainKegGenKem(crypto.RSAKem4096Scheme, buildName, buildDate, buildVersion, buildAuthor, buildLicense, exit, stdout, stdin)
 }
 
 type keyGenTestSig struct{}
 
 func (k keyGenTestSig) Main(buildName, buildDate, buildVersion, buildAuthor, buildLicense string, exit func(code int), stdout *os.File, stdin *os.File) {
-	mainKegGenSig(crypto.RSASig4096Scheme, buildName, buildDate, buildVersion, buildAuthor, buildLicense, exit, stdout, stdin)
+	TestingMainKegGenSig(crypto.RSASig4096Scheme, buildName, buildDate, buildVersion, buildAuthor, buildLicense, exit, stdout, stdin)
 }
 
 func genericTest(t *testing.T, test keyGenTest) {
