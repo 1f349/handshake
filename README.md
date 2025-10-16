@@ -25,7 +25,7 @@ thereby failing the proof check (A probability equal to 1/[Number of possible ke
 The signatures are performed over a hashed form of the data they are signing, 
 which also have a much higher, but still negligible chance of collision, 
 with other valid data (Due to hashes being shorter than the input data therefore having less entropy)
-snd is mitigated via specifying the use of a 'collision-resistant' hash function.
+and is mitigated via specifying the use of a 'collision-resistant' hash function.
 
 ## Packets
 
