@@ -4,6 +4,7 @@ package config
 
 import "hash"
 
+// SigConfig used to represent a signature to present to the other node
 type SigConfig struct {
 	Data    []byte
 	Key     []byte

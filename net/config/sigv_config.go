@@ -7,6 +7,7 @@ import (
 	"hash"
 )
 
+// SigVerifierConfig used to represent a verification key to check received singatures
 type SigVerifierConfig struct {
 	SigDataHash   hash.Hash
 	Scheme        crypto.SigScheme

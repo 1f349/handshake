@@ -7,6 +7,7 @@ import (
 	"hash"
 )
 
+// NodeConfig used to represent the local and remote config
 type NodeConfig struct {
 	KEM             crypto.KemScheme
 	HMACHash        hash.Hash

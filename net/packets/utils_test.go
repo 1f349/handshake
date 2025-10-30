@@ -43,6 +43,19 @@ func TestWriteReadBuff(t *testing.T) {
 	assert.Equal(t, bts, bts2)
 }
 
+func TestWriteReadNilBuff(t *testing.T) {
+	var bts []byte = nil
+	buff := bytes.NewBuffer(make([]byte, 0, 1))
+	n, err := writeBuff(buff, bts)
+	assert.NoError(t, err)
+	assert.Equal(t, len(bts)+1, n)
+	assert.Equal(t, len(bts)+1, len(buff.Bytes()))
+	n, err, bts2 := readBuff(buff)
+	assert.NoError(t, err)
+	assert.Equal(t, len(bts)+1, n)
+	assert.Equal(t, []byte{}, bts2)
+}
+
 func TestGetUUID(t *testing.T) {
 	a := GetUUID()
 	b := [16]byte{}
