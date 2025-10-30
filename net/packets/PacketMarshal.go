@@ -75,6 +75,12 @@ func (p *PacketMarshaller) unmarshal(header PacketHeader, conn io.Reader) (*Pack
 		pyld = &SignedPacketPublicKeyPayload{}
 	case PublicKeySignedPacketType:
 		pyld = &PublicKeySignedPacketPayload{}
+	case InitPacketType:
+		pyld = &InitPayload{}
+	case InitProofPacketType:
+		pyld = &InitProofPayload{}
+	case FinalProofPacketType:
+		pyld = &FinalProofPayload{}
 	default:
 		return header.Clone(), nil, ErrInvalidPacketID
 	}
