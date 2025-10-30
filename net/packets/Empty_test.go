@@ -10,7 +10,7 @@ import (
 
 var ValidEmptyPayload = &EmptyPayload{}
 
-func TestEmptyWriteRead(t *testing.T) {
+func TestEmptyPayload(t *testing.T) {
 	buff := new(bytes.Buffer)
 	payload := ValidEmptyPayload
 	n, err := payload.WriteTo(buff)

@@ -12,7 +12,7 @@ import (
 var ValidFinalProofPayload = &FinalProofPayload{ProofHMAC: sha256.New().Sum(nil)}
 var InvalidFinalProofPayload = &FinalProofPayload{ProofHMAC: nil}
 
-func TestValidFinalProofWriteRead(t *testing.T) {
+func TestValidFinalProofPayload(t *testing.T) {
 	buff := new(bytes.Buffer)
 	payload := ValidFinalProofPayload
 	n, err := payload.WriteTo(buff)
@@ -28,7 +28,7 @@ func TestValidFinalProofWriteRead(t *testing.T) {
 	assert.Equal(t, payload.ProofHMAC, rPayload.ProofHMAC)
 }
 
-func TestInvalidFinalProofWriteRead(t *testing.T) {
+func TestInvalidFinalProofPayload(t *testing.T) {
 	buff := new(bytes.Buffer)
 	payload := InvalidFinalProofPayload
 	n, err := payload.WriteTo(buff)
