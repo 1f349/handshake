@@ -9,36 +9,36 @@ import (
 	"io"
 )
 
-const SignedPacketSigPublicKeyPacketType = PacketType(10)
+const SignedPacketPublicKeyPacketType = PacketType(10)
 
-type SignedPacketSigPublicKeyPayload struct {
+type SignedPacketPublicKeyPayload struct {
 	Data []byte
 	key  crypto.SigPublicKey
 }
 
-func (p *SignedPacketSigPublicKeyPayload) MarshalHashCalculator() hash.Hash {
+func (p *SignedPacketPublicKeyPayload) MarshalHashCalculator() hash.Hash {
 	return nil
 }
 
-func (p *SignedPacketSigPublicKeyPayload) SetCompleteHash([]byte) {
+func (p *SignedPacketPublicKeyPayload) SetCompleteHash([]byte) {
 }
 
-func (p *SignedPacketSigPublicKeyPayload) WriteTo(w io.Writer) (n int64, err error) {
+func (p *SignedPacketPublicKeyPayload) WriteTo(w io.Writer) (n int64, err error) {
 	m, err := writeBuff(w, p.Data)
 	return int64(m), err
 }
 
-func (p *SignedPacketSigPublicKeyPayload) ReadFrom(r io.Reader) (n int64, err error) {
+func (p *SignedPacketPublicKeyPayload) ReadFrom(r io.Reader) (n int64, err error) {
 	var m int
 	m, err, p.Data = readBuff(r)
 	return int64(m), err
 }
 
-func (p *SignedPacketSigPublicKeyPayload) Size() uint {
+func (p *SignedPacketPublicKeyPayload) Size() uint {
 	return uint(intbyteutils.LenUintAsBytes(uint(len(p.Data))) + len(p.Data))
 }
 
-func (p *SignedPacketSigPublicKeyPayload) Load(scheme crypto.SigScheme) (crypto.SigPublicKey, error) {
+func (p *SignedPacketPublicKeyPayload) Load(scheme crypto.SigScheme) (crypto.SigPublicKey, error) {
 	if p.key != nil {
 		return p.key, nil
 	}
@@ -47,7 +47,7 @@ func (p *SignedPacketSigPublicKeyPayload) Load(scheme crypto.SigScheme) (crypto.
 	return p.key, err
 }
 
-func (p *SignedPacketSigPublicKeyPayload) Save(key crypto.SigPublicKey) error {
+func (p *SignedPacketPublicKeyPayload) Save(key crypto.SigPublicKey) error {
 	if key == nil {
 		return crypto.ErrKeyNil
 	}

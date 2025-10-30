@@ -9,12 +9,12 @@ import (
 	"testing"
 )
 
-var validPublicKeyPayload *PublicKeyPayload = nil
-var invalidPublicKeyPayload *PublicKeyPayload = nil
+var validPublicKeyPayload *PublicKeyDataPayload = nil
+var invalidPublicKeyPayload *PublicKeyDataPayload = nil
 
-func GetValidPublicKeyPayload() *PublicKeyPayload {
+func GetValidPublicKeyPayload() *PublicKeyDataPayload {
 	if validPublicKeyPayload == nil {
-		validPublicKeyPayload = &PublicKeyPayload{}
+		validPublicKeyPayload = &PublicKeyDataPayload{}
 		scheme := crypto.RSAKem4096Scheme
 		k, _, err := scheme.GenerateKeyPair()
 		if err != nil {
@@ -28,11 +28,11 @@ func GetValidPublicKeyPayload() *PublicKeyPayload {
 	return validPublicKeyPayload
 }
 
-func GetInvalidPublicKeyPayload() *PublicKeyPayload {
+func GetInvalidPublicKeyPayload() *PublicKeyDataPayload {
 	if invalidPublicKeyPayload != nil {
 		return invalidPublicKeyPayload
 	}
-	invalidPublicKeyPayload = &PublicKeyPayload{Data: []byte{0, 1, 2, 3}}
+	invalidPublicKeyPayload = &PublicKeyDataPayload{Data: []byte{0, 1, 2, 3}}
 	return invalidPublicKeyPayload
 }
 
@@ -43,7 +43,7 @@ func TestValidPublicKeyPayload(t *testing.T) {
 	assert.NoError(t, err)
 	assert.GreaterOrEqual(t, n, int64(0))
 	assert.Equal(t, payload.Size(), uint(n))
-	rPayload := &PublicKeyPayload{}
+	rPayload := &PublicKeyDataPayload{}
 	n, err = rPayload.ReadFrom(buff)
 	assert.NoError(t, err)
 	assert.GreaterOrEqual(t, n, int64(0))
@@ -66,7 +66,7 @@ func TestInvalidPublicKeyPayload(t *testing.T) {
 	assert.NoError(t, err)
 	assert.GreaterOrEqual(t, n, int64(0))
 	assert.Equal(t, payload.Size(), uint(n))
-	rPayload := &PublicKeyPayload{}
+	rPayload := &PublicKeyDataPayload{}
 	n, err = rPayload.ReadFrom(buff)
 	assert.NoError(t, err)
 	assert.GreaterOrEqual(t, n, int64(0))

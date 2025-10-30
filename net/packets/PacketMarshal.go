@@ -70,9 +70,9 @@ func (p *PacketMarshaller) unmarshal(header PacketHeader, conn io.Reader) (*Pack
 	case ConnectionRejectedPacketType, PublicKeyRequestPacketType, SignatureRequestPacketType, SignaturePublicKeyRequestPacketType:
 		pyld = &EmptyPayload{}
 	case PublicKeyDataPacketType:
-		pyld = &PublicKeyPayload{}
-	case SignedPacketSigPublicKeyPacketType:
-		pyld = &SignedPacketSigPublicKeyPayload{}
+		pyld = &PublicKeyDataPayload{}
+	case SignedPacketPublicKeyPacketType:
+		pyld = &SignedPacketPublicKeyPayload{}
 	case PublicKeySignedPacketType:
 		pyld = &PublicKeySignedPacketPayload{}
 	default:

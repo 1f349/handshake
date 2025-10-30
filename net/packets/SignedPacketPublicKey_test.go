@@ -9,12 +9,12 @@ import (
 	"testing"
 )
 
-var validSignedPacketSigPublicKeyPayload *SignedPacketSigPublicKeyPayload = nil
-var invalidSignedPacketSigPublicKeyPayload *SignedPacketSigPublicKeyPayload = nil
+var validSignedPacketSigPublicKeyPayload *SignedPacketPublicKeyPayload = nil
+var invalidSignedPacketSigPublicKeyPayload *SignedPacketPublicKeyPayload = nil
 
-func GetValidSignedPacketSigPublicKeyPayload() *SignedPacketSigPublicKeyPayload {
+func GetValidSignedPacketSigPublicKeyPayload() *SignedPacketPublicKeyPayload {
 	if validSignedPacketSigPublicKeyPayload == nil {
-		validSignedPacketSigPublicKeyPayload = &SignedPacketSigPublicKeyPayload{}
+		validSignedPacketSigPublicKeyPayload = &SignedPacketPublicKeyPayload{}
 		scheme := crypto.RSASig4096Scheme
 		k, _, err := scheme.GenerateKeyPair()
 		if err != nil {
@@ -29,11 +29,11 @@ func GetValidSignedPacketSigPublicKeyPayload() *SignedPacketSigPublicKeyPayload 
 	return validSignedPacketSigPublicKeyPayload
 }
 
-func GetInvalidSignedPacketSigPublicKeyPayload() *SignedPacketSigPublicKeyPayload {
+func GetInvalidSignedPacketSigPublicKeyPayload() *SignedPacketPublicKeyPayload {
 	if invalidSignedPacketSigPublicKeyPayload != nil {
 		return invalidSignedPacketSigPublicKeyPayload
 	}
-	invalidSignedPacketSigPublicKeyPayload = &SignedPacketSigPublicKeyPayload{Data: []byte{0, 1, 2, 3}}
+	invalidSignedPacketSigPublicKeyPayload = &SignedPacketPublicKeyPayload{Data: []byte{0, 1, 2, 3}}
 	return invalidSignedPacketSigPublicKeyPayload
 }
 
@@ -44,7 +44,7 @@ func TestValidSignedPacketSigPublicKeyPayload(t *testing.T) {
 	assert.NoError(t, err)
 	assert.GreaterOrEqual(t, n, int64(0))
 	assert.Equal(t, payload.Size(), uint(n))
-	rPayload := &SignedPacketSigPublicKeyPayload{}
+	rPayload := &SignedPacketPublicKeyPayload{}
 	n, err = rPayload.ReadFrom(buff)
 	assert.NoError(t, err)
 	assert.GreaterOrEqual(t, n, int64(0))
@@ -67,7 +67,7 @@ func TestInvalidSignedPacketSigPublicKeyPayload(t *testing.T) {
 	assert.NoError(t, err)
 	assert.GreaterOrEqual(t, n, int64(0))
 	assert.Equal(t, payload.Size(), uint(n))
-	rPayload := &SignedPacketSigPublicKeyPayload{}
+	rPayload := &SignedPacketPublicKeyPayload{}
 	n, err = rPayload.ReadFrom(buff)
 	assert.NoError(t, err)
 	assert.GreaterOrEqual(t, n, int64(0))
