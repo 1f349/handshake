@@ -17,13 +17,17 @@ const (
 	initProofTestInvalidEncapsulation
 	initProofTestInvalidHMAC
 	initProofTestInvalid
+	initProofTestEmptyEncapsulationInvalid
 )
 
 var initProofKeys = [4]crypto.KemPrivateKey{}
 var InitProofSecrets = [4][]byte{}
-var initProofPayloads = [4]*InitProofPayload{}
+var initProofPayloads = [5]*InitProofPayload{}
 
 func GetInitProofKey(id initProofTestID) crypto.KemPrivateKey {
+	if id == initProofTestEmptyEncapsulationInvalid {
+		return nil
+	}
 	if initProofKeys[id] == nil {
 		scheme := crypto.RSAKem4096Scheme
 		var err error
@@ -53,10 +57,12 @@ func GetInitProofPayload(id initProofTestID) *InitProofPayload {
 		default:
 			initProofPayloads[id] = &InitProofPayload{}
 		}
-		var err error
-		InitProofSecrets[id], err = initProofPayloads[id].Encapsulate(GetInitProofKey(id).Public())
-		if err != nil {
-			panic(err)
+		if id != initProofTestEmptyEncapsulationInvalid {
+			var err error
+			InitProofSecrets[id], err = initProofPayloads[id].Encapsulate(GetInitProofKey(id).Public())
+			if err != nil {
+				panic(err)
+			}
 		}
 	}
 	return initProofPayloads[id]
@@ -136,4 +142,25 @@ func TestInvalidInitProofPacketPayload(t *testing.T) {
 	cs, err := rPayload.Decapsulate(GetInitProofKey(initProofTestValid))
 	assert.NoError(t, err)
 	assert.NotEqual(t, InitProofSecrets[initProofTestInvalid], cs)
+}
+
+func TestInvalidEmptyEncapsulationInitProofPacketPayload(t *testing.T) {
+	buff := new(bytes.Buffer)
+	payload := GetInitProofPayload(initProofTestEmptyEncapsulationInvalid)
+	n, err := payload.WriteTo(buff)
+	assert.NoError(t, err)
+	assert.GreaterOrEqual(t, n, int64(0))
+	assert.Equal(t, payload.Size(), uint(n))
+	rPayload := &InitProofPayload{}
+	n, err = rPayload.ReadFrom(buff)
+	assert.NoError(t, err)
+	assert.Equal(t, payload.Size(), uint(n))
+	assert.Equal(t, payload.Size(), rPayload.Size())
+	assert.Equal(t, []byte{}, rPayload.ProofHMAC)
+	assert.Nil(t, payload.ProofHMAC)
+	assert.NotNil(t, rPayload.ProofHMAC)
+	cs, err := rPayload.Decapsulate(GetInitProofKey(initProofTestValid))
+	assert.Error(t, err)
+	assert.Equal(t, ErrNoEncapsulation, err)
+	assert.Nil(t, cs)
 }

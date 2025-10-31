@@ -24,7 +24,7 @@ func TestPacketMarshalFragmented(t *testing.T) {
 }
 
 func TestPacketMarshalFragmentedSmallMTU(t *testing.T) {
-	//const MTU = HeaderSizeForFragmentation + 1 //Not, this may be the minimum valid, but the maximum number of fragments is 255
+	//const MTU = HeaderSizeForFragmentation + 1 //Note, this may be the minimum valid, but the maximum number of fragments is 255
 	const MTU = 64
 	sharedPacketMarshalTest(t, newMTUTransport(MTU), MTU)
 }
@@ -40,6 +40,7 @@ func sharedPacketMarshalTest(t *testing.T, transport io.ReadWriter, mtu uint) {
 	testOnePayload(t, "PublicKeyRequestPacketType_Valid", marshal, PacketHeader{ID: PublicKeyRequestPacketType, ConnectionUUID: connection, Time: pt}, ValidEmptyPayload, emptyPayloadChecker)
 	testOnePayload(t, "SignatureRequestPacketType_Valid", marshal, PacketHeader{ID: SignatureRequestPacketType, ConnectionUUID: connection, Time: pt}, ValidEmptyPayload, emptyPayloadChecker)
 	testOnePayload(t, "SignaturePublicKeyRequestPacketType_Valid", marshal, PacketHeader{ID: SignaturePublicKeyRequestPacketType, ConnectionUUID: connection, Time: pt}, ValidEmptyPayload, emptyPayloadChecker)
+
 	testOnePayload(t, "PublicKeyDataPacketType_Valid", marshal, PacketHeader{ID: PublicKeyDataPacketType, ConnectionUUID: connection, Time: pt}, GetValidPublicKeyPayload(), func(o PacketPayload, r PacketPayload) bool {
 		k, err := r.(*PublicKeyDataPayload).Load(crypto.RSAKem4096Scheme)
 		if err != nil || k == nil {
@@ -58,6 +59,7 @@ func sharedPacketMarshalTest(t *testing.T, transport io.ReadWriter, mtu uint) {
 		}
 		return false
 	})
+
 	testOnePayload(t, "SignedPacketPublicKeyPacketType_Valid", marshal, PacketHeader{ID: SignedPacketPublicKeyPacketType, ConnectionUUID: connection, Time: pt}, GetValidSignedPacketSigPublicKeyPayload(), func(o PacketPayload, r PacketPayload) bool {
 		k, err := r.(*SignedPacketPublicKeyPayload).Load(crypto.RSASig4096Scheme)
 		if err != nil || k == nil {
@@ -76,6 +78,7 @@ func sharedPacketMarshalTest(t *testing.T, transport io.ReadWriter, mtu uint) {
 		}
 		return false
 	})
+
 	testOnePayload(t, "PublicKeySignedPacketType_Valid", marshal, PacketHeader{ID: PublicKeySignedPacketType, ConnectionUUID: connection, Time: pt}, GetValidPublicKeySignedPacketPayload(), func(o PacketPayload, r PacketPayload) bool {
 		if !slices.Equal(validPublicKeySignedPacketPayloadSigPubKeyHash, r.(*PublicKeySignedPacketPayload).SigPubKeyHash) {
 			return false
@@ -93,8 +96,47 @@ func sharedPacketMarshalTest(t *testing.T, transport io.ReadWriter, mtu uint) {
 		sigData, err := r.(*PublicKeySignedPacketPayload).Load(validPublicKeySignedPacketPayloadKemPubKey)
 		return err != nil && sigData.Signature == nil
 	})
+
 	//TODO: Main flow test
-	//TODO: Tests
+	testOnePayload(t, "InitPacketType_Valid2", marshal, PacketHeader{ID: InitPacketType, ConnectionUUID: connection, Time: pt}, GetInitPayload(initTestValid2), func(o PacketPayload, r PacketPayload) bool {
+		cs, err := r.(*InitPayload).Decapsulate(GetInitKey(initTestValid2))
+		assert.NoError(t, err)
+		assert.Equal(t, InitSecrets[initTestValid2], cs)
+		return slices.Equal(o.(*InitPayload).PublicKeyHash, r.(*InitPayload).PublicKeyHash)
+	})
+	testOnePayload(t, "InitPacketType_Valid2B", marshal, PacketHeader{ID: InitPacketType, ConnectionUUID: connection, Time: pt}, GetInitPayload(initTestValid2B), func(o PacketPayload, r PacketPayload) bool {
+		cs, err := r.(*InitPayload).Decapsulate(GetInitKey(initTestValid2B))
+		assert.NoError(t, err)
+		assert.Equal(t, InitSecrets[initTestValid2B], cs)
+		return slices.Equal(o.(*InitPayload).PublicKeyHash, r.(*InitPayload).PublicKeyHash) && len(r.(*InitPayload).PublicKeyHash) < 1
+	})
+	testOnePayload(t, "InitPacketType_Valid2A", marshal, PacketHeader{ID: InitPacketType, ConnectionUUID: connection, Time: pt}, GetInitPayload(initTestValid2A), func(o PacketPayload, r PacketPayload) bool {
+		cs, err := r.(*InitPayload).Decapsulate(GetInitKey(initTestValid2A))
+		assert.Error(t, err)
+		assert.Equal(t, ErrNoEncapsulation, err)
+		assert.Nil(t, cs)
+		return slices.Equal(o.(*InitPayload).PublicKeyHash, r.(*InitPayload).PublicKeyHash)
+	})
+	testOnePayload(t, "InitPacketType_Valid2AB", marshal, PacketHeader{ID: InitPacketType, ConnectionUUID: connection, Time: pt}, GetInitPayload(initTestValid2AB), func(o PacketPayload, r PacketPayload) bool {
+		cs, err := r.(*InitPayload).Decapsulate(GetInitKey(initTestValid2AB))
+		assert.Error(t, err)
+		assert.Equal(t, ErrNoEncapsulation, err)
+		assert.Nil(t, cs)
+		return slices.Equal(o.(*InitPayload).PublicKeyHash, r.(*InitPayload).PublicKeyHash) && len(r.(*InitPayload).PublicKeyHash) < 1
+	})
+	testOnePayload(t, "InitPacketType_Invalid2", marshal, PacketHeader{ID: InitPacketType, ConnectionUUID: connection, Time: pt}, GetInitPayload(initTestInvalid2), func(o PacketPayload, r PacketPayload) bool {
+		cs, err := r.(*InitPayload).Decapsulate(GetInitKey(initTestValid2))
+		assert.NoError(t, err)
+		assert.NotEqual(t, InitSecrets[initTestInvalid2], cs)
+		return slices.Equal(o.(*InitPayload).PublicKeyHash, r.(*InitPayload).PublicKeyHash)
+	})
+	testOnePayload(t, "InitPacketType_Invalid2B", marshal, PacketHeader{ID: InitPacketType, ConnectionUUID: connection, Time: pt}, GetInitPayload(initTestInvalid2B), func(o PacketPayload, r PacketPayload) bool {
+		cs, err := r.(*InitPayload).Decapsulate(GetInitKey(initTestValid2B))
+		assert.NoError(t, err)
+		assert.NotEqual(t, InitSecrets[initTestInvalid2B], cs)
+		return slices.Equal(o.(*InitPayload).PublicKeyHash, r.(*InitPayload).PublicKeyHash) && len(r.(*InitPayload).PublicKeyHash) < 1
+	})
+
 	testOnePayload(t, "InitProofPacketType_Valid", marshal, PacketHeader{ID: InitProofPacketType, ConnectionUUID: connection, Time: pt}, GetInitProofPayload(initProofTestValid), func(o PacketPayload, r PacketPayload) bool {
 		cs, err := r.(*InitProofPayload).Decapsulate(GetInitProofKey(initProofTestValid))
 		assert.NoError(t, err)
@@ -119,6 +161,14 @@ func sharedPacketMarshalTest(t *testing.T, transport io.ReadWriter, mtu uint) {
 		assert.NotEqual(t, InitProofSecrets[initProofTestInvalid], cs)
 		return slices.Equal(o.(*InitProofPayload).ProofHMAC, r.(*InitProofPayload).ProofHMAC) && len(r.(*InitProofPayload).ProofHMAC) == 0
 	})
+	testOnePayload(t, "InitProofPacketType_InvalidEmptyEncapsulation", marshal, PacketHeader{ID: InitProofPacketType, ConnectionUUID: connection, Time: pt}, GetInitProofPayload(initProofTestEmptyEncapsulationInvalid), func(o PacketPayload, r PacketPayload) bool {
+		cs, err := r.(*InitProofPayload).Decapsulate(GetInitProofKey(initProofTestValid))
+		assert.Error(t, err)
+		assert.Equal(t, ErrNoEncapsulation, err)
+		assert.Nil(t, cs)
+		return slices.Equal(o.(*InitProofPayload).ProofHMAC, r.(*InitProofPayload).ProofHMAC) && len(r.(*InitProofPayload).ProofHMAC) == 0
+	})
+
 	testOnePayload(t, "FinalProofPacketType_Valid", marshal, PacketHeader{ID: FinalProofPacketType, ConnectionUUID: connection, Time: pt}, ValidFinalProofPayload, func(o PacketPayload, r PacketPayload) bool {
 		return slices.Equal(o.(*FinalProofPayload).ProofHMAC, r.(*FinalProofPayload).ProofHMAC)
 	})
