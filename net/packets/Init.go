@@ -17,9 +17,11 @@ var ErrNoEncapsulation = errors.New("no encapsulation")
 
 type InitPayload struct {
 	encapsulation []byte
+	// PublicKeyHash hash of the local crypto.KemPublicKey
 	PublicKeyHash []byte
-	PacketHash    []byte
-	PacketHasher  hash.Hash
+	// PacketHash contains the hash of the packet when sent by a PacketMarshaller with its header information using PacketHasher
+	PacketHash   []byte
+	PacketHasher hash.Hash
 }
 
 func (i *InitPayload) WriteTo(w io.Writer) (n int64, err error) {

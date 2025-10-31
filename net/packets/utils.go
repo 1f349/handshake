@@ -4,6 +4,7 @@ package packets
 
 import (
 	"crypto/rand"
+	"encoding"
 	"errors"
 	intbyteutils "github.com/1f349/int-byte-utils"
 	"hash"
@@ -171,5 +172,18 @@ func PacketDataHash(packetHeader PacketHeader, payload PacketPayload, h hash.Has
 	if err != nil {
 		return nil
 	}
+	return h.Sum(nil)
+}
+
+func BinaryMarshalHash(bMarshal encoding.BinaryMarshaler, h hash.Hash) []byte {
+	if bMarshal == nil || h == nil {
+		return nil
+	}
+	h.Reset()
+	bts, err := bMarshal.MarshalBinary()
+	if err != nil {
+		return nil
+	}
+	h.Write(bts)
 	return h.Sum(nil)
 }

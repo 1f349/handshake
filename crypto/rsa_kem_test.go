@@ -49,20 +49,22 @@ func processTestRSAKem(t *testing.T, k KemPrivateKey, pk KemPublicKey, wrongKeys
 	assert.True(t, len(ctxt) == pk.Scheme().CiphertextSize())
 	assert.True(t, len(secret) == pk.Scheme().SharedKeySize())
 	rSecret, err := k.Scheme().Decapsulate(k, ctxt)
+	assert.NoError(t, err)
+	assert.NotNil(t, rSecret)
+	assert.True(t, len(rSecret) == k.Scheme().SharedKeySize())
 	if wrongKeys {
-		assert.Error(t, err)
-		assert.Nil(t, rSecret)
+		assert.False(t, subtle.ConstantTimeCompare(secret, rSecret) == 1)
 	} else {
-		assert.NoError(t, err)
-		assert.NotNil(t, rSecret)
-		assert.True(t, len(rSecret) == k.Scheme().SharedKeySize())
 		assert.True(t, subtle.ConstantTimeCompare(secret, rSecret) == 1)
 	}
 
 	rSecret, err = k.Scheme().Decapsulate(k, damageBytes(ctxt))
-	assert.Error(t, err)
-	assert.Nil(t, rSecret)
+	assert.NoError(t, err)
+	assert.NotNil(t, rSecret)
+	assert.True(t, len(rSecret) == k.Scheme().SharedKeySize())
+	assert.False(t, subtle.ConstantTimeCompare(secret, rSecret) == 1)
 	rSecret, err = k.Scheme().Decapsulate(k, []byte{0, 1, 2, 3, 4, 5, 6})
 	assert.Error(t, err)
+	assert.Equal(t, ErrCipherTextSizeWrong, err)
 	assert.Nil(t, rSecret)
 }

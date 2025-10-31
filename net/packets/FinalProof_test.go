@@ -10,7 +10,7 @@ import (
 )
 
 var ValidFinalProofPayload = &FinalProofPayload{ProofHMAC: sha256.New().Sum(nil)}
-var InvalidFinalProofPayload = &FinalProofPayload{ProofHMAC: nil}
+var InvalidFinalProofPayload = &FinalProofPayload{}
 
 func TestValidFinalProofPayload(t *testing.T) {
 	buff := new(bytes.Buffer)

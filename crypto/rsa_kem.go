@@ -6,10 +6,13 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
+	"errors"
 )
 
 const rsa4096SharedKeySize = 32
 const rsa4096KeySize = 512
+
+var ErrCipherTextSizeWrong = errors.New("cipher text size wrong")
 
 var RSAKem4096Scheme = RSAKem4096{}
 
@@ -42,12 +45,21 @@ func (r RSAKem4096) Encapsulate(key KemPublicKey) (ctxt, secret []byte, err erro
 	return nil, nil, ErrIncompatibleKey
 }
 
-func (r RSAKem4096) Decapsulate(key KemPrivateKey, ctxt []byte) ([]byte, error) {
+func (r RSAKem4096) Decapsulate(key KemPrivateKey, ctxt []byte) (secret []byte, err error) {
 	if key == nil {
 		return nil, ErrKeyNil
 	}
+	if len(ctxt) != r.CiphertextSize() {
+		return nil, ErrCipherTextSizeWrong
+	}
 	if wk, ok := key.(*RSAKem4096PrivateKey); ok {
-		return rsa.DecryptOAEP(sha256.New(), rand.Reader, wk.PrivateKey, ctxt, []byte("kem"))
+		secret, err = rsa.DecryptOAEP(sha256.New(), rand.Reader, wk.PrivateKey, ctxt, []byte("kem"))
+		if err != nil {
+			secret = make([]byte, r.SharedKeySize())
+			err = nil
+			_, err = rand.Read(secret)
+		}
+		return
 	}
 	return nil, ErrIncompatibleKey
 }

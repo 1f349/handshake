@@ -14,8 +14,9 @@ const InitProofPacketType = PacketType(3)
 type InitProofPayload struct {
 	encapsulation []byte
 	ProofHMAC     []byte
-	PacketHash    []byte
-	PacketHasher  hash.Hash
+	// PacketHash contains the hash of the packet when sent by a PacketMarshaller with its header information using PacketHasher
+	PacketHash   []byte
+	PacketHasher hash.Hash
 }
 
 func (i *InitProofPayload) WriteTo(w io.Writer) (n int64, err error) {

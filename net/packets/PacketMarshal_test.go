@@ -93,7 +93,32 @@ func sharedPacketMarshalTest(t *testing.T, transport io.ReadWriter, mtu uint) {
 		sigData, err := r.(*PublicKeySignedPacketPayload).Load(validPublicKeySignedPacketPayloadKemPubKey)
 		return err != nil && sigData.Signature == nil
 	})
+	//TODO: Main flow test
 	//TODO: Tests
+	testOnePayload(t, "InitProofPacketType_Valid", marshal, PacketHeader{ID: InitProofPacketType, ConnectionUUID: connection, Time: pt}, GetInitProofPayload(initProofTestValid), func(o PacketPayload, r PacketPayload) bool {
+		cs, err := r.(*InitProofPayload).Decapsulate(GetInitProofKey(initProofTestValid))
+		assert.NoError(t, err)
+		assert.Equal(t, InitProofSecrets[initProofTestValid], cs)
+		return slices.Equal(o.(*InitProofPayload).ProofHMAC, r.(*InitProofPayload).ProofHMAC)
+	})
+	testOnePayload(t, "InitProofPacketType_InvalidEncapsulation", marshal, PacketHeader{ID: InitProofPacketType, ConnectionUUID: connection, Time: pt}, GetInitProofPayload(initProofTestInvalidEncapsulation), func(o PacketPayload, r PacketPayload) bool {
+		cs, err := r.(*InitProofPayload).Decapsulate(GetInitProofKey(initProofTestValid))
+		assert.NoError(t, err)
+		assert.NotEqual(t, InitProofSecrets[initProofTestInvalidEncapsulation], cs)
+		return slices.Equal(o.(*InitProofPayload).ProofHMAC, r.(*InitProofPayload).ProofHMAC)
+	})
+	testOnePayload(t, "InitProofPacketType_InvalidHMAC", marshal, PacketHeader{ID: InitProofPacketType, ConnectionUUID: connection, Time: pt}, GetInitProofPayload(initProofTestInvalidHMAC), func(o PacketPayload, r PacketPayload) bool {
+		cs, err := r.(*InitProofPayload).Decapsulate(GetInitProofKey(initProofTestInvalidHMAC))
+		assert.NoError(t, err)
+		assert.Equal(t, InitProofSecrets[initProofTestInvalidHMAC], cs)
+		return slices.Equal(o.(*InitProofPayload).ProofHMAC, r.(*InitProofPayload).ProofHMAC) && len(r.(*InitProofPayload).ProofHMAC) == 0
+	})
+	testOnePayload(t, "InitProofPacketType_Invalid", marshal, PacketHeader{ID: InitProofPacketType, ConnectionUUID: connection, Time: pt}, GetInitProofPayload(initProofTestInvalid), func(o PacketPayload, r PacketPayload) bool {
+		cs, err := r.(*InitProofPayload).Decapsulate(GetInitProofKey(initProofTestValid))
+		assert.NoError(t, err)
+		assert.NotEqual(t, InitProofSecrets[initProofTestInvalid], cs)
+		return slices.Equal(o.(*InitProofPayload).ProofHMAC, r.(*InitProofPayload).ProofHMAC) && len(r.(*InitProofPayload).ProofHMAC) == 0
+	})
 	testOnePayload(t, "FinalProofPacketType_Valid", marshal, PacketHeader{ID: FinalProofPacketType, ConnectionUUID: connection, Time: pt}, ValidFinalProofPayload, func(o PacketPayload, r PacketPayload) bool {
 		return slices.Equal(o.(*FinalProofPayload).ProofHMAC, r.(*FinalProofPayload).ProofHMAC)
 	})
