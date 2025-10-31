@@ -4,7 +4,9 @@ package packets
 
 import (
 	"bytes"
+	"crypto/hmac"
 	"crypto/sha256"
+	"crypto/subtle"
 	"errors"
 	"github.com/1f349/handshake/crypto"
 	"github.com/stretchr/testify/assert"
@@ -13,6 +15,35 @@ import (
 	"testing"
 	"time"
 )
+
+var marshalLocalKey crypto.KemPrivateKey
+var marshalRemoteKey crypto.KemPrivateKey
+var MarshalHasher = sha256.New()
+var MarshalHMACBase = sha256.New
+
+func GetMarshalLocalKey() crypto.KemPrivateKey {
+	if marshalLocalKey == nil {
+		scheme := crypto.RSAKem4096Scheme
+		var err error
+		_, marshalLocalKey, err = scheme.GenerateKeyPair()
+		if err != nil {
+			panic(err)
+		}
+	}
+	return marshalLocalKey
+}
+
+func GetMarshalRemoteKey() crypto.KemPrivateKey {
+	if marshalRemoteKey == nil {
+		scheme := crypto.RSAKem4096Scheme
+		var err error
+		_, marshalRemoteKey, err = scheme.GenerateKeyPair()
+		if err != nil {
+			panic(err)
+		}
+	}
+	return marshalRemoteKey
+}
 
 func TestPacketMarshal(t *testing.T) {
 	sharedPacketMarshalTest(t, new(bytes.Buffer), 0)
@@ -97,7 +128,6 @@ func sharedPacketMarshalTest(t *testing.T, transport io.ReadWriter, mtu uint) {
 		return err != nil && sigData.Signature == nil
 	})
 
-	//TODO: Main flow test
 	testOnePayload(t, "InitPacketType_Valid2", marshal, PacketHeader{ID: InitPacketType, ConnectionUUID: connection, Time: pt}, GetInitPayload(initTestValid2), func(o PacketPayload, r PacketPayload) bool {
 		cs, err := r.(*InitPayload).Decapsulate(GetInitKey(initTestValid2))
 		assert.NoError(t, err)
@@ -175,10 +205,62 @@ func sharedPacketMarshalTest(t *testing.T, transport io.ReadWriter, mtu uint) {
 	testOnePayload(t, "FinalProofPacketType_Invalid", marshal, PacketHeader{ID: FinalProofPacketType, ConnectionUUID: connection, Time: pt}, InvalidFinalProofPayload, func(o PacketPayload, r PacketPayload) bool {
 		return slices.Equal(o.(*FinalProofPayload).ProofHMAC, r.(*FinalProofPayload).ProofHMAC) && len(r.(*FinalProofPayload).ProofHMAC) == 0
 	})
+
+	t.Run("MainFlow", func(t *testing.T) {
+		lHash := BinaryMarshalHash(GetMarshalLocalKey().Public(), MarshalHasher)
+
+		initP := &InitPayload{PublicKeyHash: lHash}
+		ss1Local, err := initP.Encapsulate(GetMarshalRemoteKey().Public())
+		assert.NoError(t, err)
+		assert.NotNil(t, ss1Local)
+		initP.PacketHasher = hmac.New(MarshalHMACBase, ss1Local)
+		err = marshal.Marshal(PacketHeader{ID: InitPacketType, ConnectionUUID: connection, Time: pt.Add(time.Second)}, initP)
+		assert.NoError(t, err)
+		rHeader, rPayload := readOnePayload(t, marshal)
+		assert.True(t, pt.Add(time.Second).Equal(rHeader.Time))
+		ss1Remote, err := rPayload.(*InitPayload).Decapsulate(GetMarshalRemoteKey())
+		assert.NoError(t, err)
+		assert.Equal(t, ss1Local, ss1Remote)
+		assert.Equal(t, lHash, rPayload.(*InitPayload).PublicKeyHash)
+
+		initProofP := &InitProofPayload{ProofHMAC: PacketDataHash(*rHeader, rPayload, hmac.New(MarshalHMACBase, ss1Remote))}
+		ss2Remote, err := initProofP.Encapsulate(GetMarshalLocalKey().Public())
+		assert.NoError(t, err)
+		assert.NotNil(t, ss2Remote)
+		initProofP.PacketHasher = hmac.New(MarshalHMACBase, ss2Remote)
+		err = marshal.Marshal(PacketHeader{ID: InitProofPacketType, ConnectionUUID: connection, Time: pt.Add(time.Minute)}, initProofP)
+		assert.NoError(t, err)
+		rHeader, rPayload = readOnePayload(t, marshal)
+		assert.True(t, pt.Add(time.Minute).Equal(rHeader.Time))
+		ss2Local, err := rPayload.(*InitProofPayload).Decapsulate(GetMarshalLocalKey())
+		assert.NoError(t, err)
+		assert.Equal(t, ss2Local, ss2Remote)
+		assert.True(t, subtle.ConstantTimeCompare(initP.PacketHash, rPayload.(*InitProofPayload).ProofHMAC) == 1)
+
+		finalProofP := &FinalProofPayload{ProofHMAC: PacketDataHash(*rHeader, rPayload, hmac.New(MarshalHMACBase, ss2Local))}
+		err = marshal.Marshal(PacketHeader{ID: FinalProofPacketType, ConnectionUUID: connection, Time: pt.Add(time.Minute * 2)}, finalProofP)
+		assert.NoError(t, err)
+		rHeader, rPayload = readOnePayload(t, marshal)
+		assert.True(t, pt.Add(time.Minute*2).Equal(rHeader.Time))
+		assert.True(t, subtle.ConstantTimeCompare(initProofP.PacketHash, rPayload.(*FinalProofPayload).ProofHMAC) == 1)
+	})
 }
 
 func emptyPayloadChecker(PacketPayload, PacketPayload) bool {
 	return true
+}
+
+func readOnePayload(t *testing.T, marshal *PacketMarshaller) (*PacketHeader, PacketPayload) {
+	var rHeader *PacketHeader
+	var rPayload PacketPayload
+	err := ErrFragmentReceived
+	for errors.Is(err, ErrFragmentReceived) {
+		rHeader, rPayload, err = marshal.Unmarshal()
+	}
+	assert.NotNil(t, rHeader)
+	assert.NoError(t, err)
+	assert.NotNil(t, rPayload)
+	return rHeader, rPayload
 }
 
 func testOnePayload(t *testing.T, name string, marshal *PacketMarshaller, header PacketHeader, payload PacketPayload, payloadChecker func(o PacketPayload, r PacketPayload) bool) {
