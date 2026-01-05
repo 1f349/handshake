@@ -9,11 +9,9 @@ import (
 	"time"
 )
 
-const ZeroPacketType = PacketType(0)
-
 func TestPacketHeader(t *testing.T) {
 	cTime := time.Now()
-	header := PacketHeader{ID: ZeroPacketType, ConnectionUUID: GetUUID(), Time: MilliTime(cTime)}
+	header := PacketHeader{ID: ZeroReservedPacketType, ConnectionUUID: GetUUID(), Time: MilliTime(cTime)}
 	var valid, invalid, zero, truncated []byte
 	buff := new(bytes.Buffer)
 	n, err := header.WriteTo(buff)
@@ -63,7 +61,7 @@ func TestPacketHeader(t *testing.T) {
 
 func TestPacketHeaderWithFragment(t *testing.T) {
 	cTime := time.Now()
-	header := PacketHeader{ID: ZeroPacketType, ConnectionUUID: GetUUID(), Time: MilliTime(cTime)}
+	header := PacketHeader{ID: ZeroReservedPacketType, ConnectionUUID: GetUUID(), Time: MilliTime(cTime)}
 	header = *header.CloneAsFragment(1, 2, 24)
 	var valid, invalid, cloned, zero, truncated []byte
 	buff := new(bytes.Buffer)
