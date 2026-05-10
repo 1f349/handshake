@@ -13,8 +13,7 @@ type HandshakeConn interface {
 	Handshake() error
 	HandshakeCompleted() bool
 	HandshakeFailed() bool
-	// HandshakeCompletedWaiter channel value represents if the handshake was canceled (Only one receiver of this channel with receive the value)
-	HandshakeCompletedWaiter() <-chan bool
+	WaitForHandshakeCompletion()
 	CancelHandshake()
 	Handshaking() bool
 	GetSettings() config.NodeConfig

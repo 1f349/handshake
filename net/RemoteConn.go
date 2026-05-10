@@ -5,6 +5,7 @@ package net
 import (
 	"github.com/1f349/handshake/net/config"
 	"github.com/1f349/handshake/net/packets"
+	"github.com/1f349/queue"
 	"net"
 	"sync"
 )
@@ -16,9 +17,14 @@ func NewRemoteConn(conn net.Conn) HandshakeConn {
 func NewRemoteConnWithConfig(conn net.Conn, settings config.NodeConfig, presentedSig config.SigConfig, sigVerifiers []config.SigVerifierConfig) HandshakeConn {
 	return &RemoteConn{
 		Conn:             conn,
-		finishChannel:    make(chan bool, 1),
+		finishChannel:    make(chan bool),
+		cancelledChannel: make(chan struct{}),
+		cancelWaitCond:   sync.NewCond(&sync.Mutex{}),
+		sendQueue: queue.NewQueue[struct {
+			packets.PacketHeader
+			packets.PacketPayload
+		}](),
 		handshakeLock:    &sync.Mutex{},
-		cancelLock:       &sync.Mutex{},
 		handshakePhase:   packets.ZeroReservedPacketType,
 		settings:         settings,
 		presentSignature: presentedSig,
@@ -32,11 +38,16 @@ type RemoteConn struct {
 	presentSignature config.SigConfig
 	verifySignature  []config.SigVerifierConfig
 	finishChannel    chan bool
-	cancelLock       *sync.Mutex
-	handshakeLock    *sync.Mutex
-	handshakePhase   packets.PacketType
-	localSecret      []byte
-	remoteSecret     []byte
+	cancelledChannel chan struct{}
+	cancelWaitCond   *sync.Cond
+	sendQueue        queue.Queue[struct {
+		packets.PacketHeader
+		packets.PacketPayload
+	}]
+	handshakeLock  *sync.Mutex
+	handshakePhase packets.PacketType
+	localSecret    []byte
+	remoteSecret   []byte
 }
 
 func (r *RemoteConn) Handshaking() bool {
@@ -105,9 +116,27 @@ func (r *RemoteConn) SetSignatureVerificationSettings(configs []config.SigVerifi
 	r.verifySignature = configs
 	return r
 }
+func (r *RemoteConn) sendPump() {
+	a := r.sendQueue.Pop()
+	if a == nil {
+
+	}
+	//TODO: implement me
+}
+
+func (r *RemoteConn) cancelWaiter() {
+	select {
+	case cancelled := <-r.finishChannel:
+		if cancelled {
+
+		}
+		//TODO: implement me
+	}
+}
 
 func (r *RemoteConn) Handshake() error {
-	//TODO: implement me
+	go r.sendPump()
+	go r.cancelWaiter()
 	panic("implement me")
 }
 
@@ -119,16 +148,15 @@ func (r *RemoteConn) HandshakeFailed() bool {
 	return r.handshakePhase == packets.ConnectionRejectedPacketType
 }
 
-// HandshakeCompletedWaiter channel value represents if the handshake was canceled (Only one receiver of this channel with receive the value)
-func (r *RemoteConn) HandshakeCompletedWaiter() <-chan bool {
-	return r.finishChannel
+func (r *RemoteConn) WaitForHandshakeCompletion() {
+	panic("implement me")
 }
 
 func (r *RemoteConn) CancelHandshake() {
-	r.cancelLock.Lock()
-	defer r.cancelLock.Unlock()
-	// Should only be closed within Handshake while locked using cancelLock and the proper final value of handshakePhase is set within this lock
 	if !r.HandshakeCompleted() && !r.HandshakeFailed() {
-		r.finishChannel <- true
+		select {
+		case r.finishChannel <- true:
+		case <-r.cancelledChannel:
+		}
 	}
 }

@@ -16,9 +16,11 @@ func NewLocalConn(conn net.Conn) HandshakeConn {
 func NewLocalConnWithConfig(conn net.Conn, settings config.NodeConfig, presentedSig config.SigConfig, sigVerifiers []config.SigVerifierConfig) HandshakeConn {
 	return &LocalConn{
 		Conn:             conn,
-		finishChannel:    make(chan bool, 1),
+		finishChannel:    make(chan bool),
+		cancelledChannel: make(chan struct{}),
+		cancelWaitCond:   sync.NewCond(&sync.Mutex{}),
+		//TODO: Send Queue
 		handshakeLock:    &sync.Mutex{},
-		cancelLock:       &sync.Mutex{},
 		handshakePhase:   packets.InitPacketType,
 		settings:         settings,
 		presentSignature: presentedSig,
@@ -32,7 +34,8 @@ type LocalConn struct {
 	presentSignature config.SigConfig
 	verifySignature  []config.SigVerifierConfig
 	finishChannel    chan bool
-	cancelLock       *sync.Mutex
+	cancelledChannel chan struct{}
+	cancelWaitCond   *sync.Cond
 	handshakeLock    *sync.Mutex
 	handshakePhase   packets.PacketType
 	localSecret      []byte
@@ -120,16 +123,15 @@ func (l *LocalConn) HandshakeFailed() bool {
 	return l.handshakePhase == packets.ConnectionRejectedPacketType
 }
 
-// HandshakeCompletedWaiter channel value represents if the handshake was canceled (Only one receiver of this channel with receive the value)
-func (l *LocalConn) HandshakeCompletedWaiter() <-chan bool {
-	return l.finishChannel
+func (l *LocalConn) WaitForHandshakeCompletion() {
+	panic("implement me")
 }
 
 func (l *LocalConn) CancelHandshake() {
-	l.cancelLock.Lock()
-	defer l.cancelLock.Unlock()
-	// Should only be closed within Handshake while locked using cancelLock and the proper final value of handshakePhase is set within this lock
 	if !l.HandshakeCompleted() && !l.HandshakeFailed() {
-		l.finishChannel <- true
+		select {
+		case l.finishChannel <- true:
+		case <-l.cancelledChannel:
+		}
 	}
 }
