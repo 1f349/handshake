@@ -1,4 +1,4 @@
-// (C) 1f349 2025 - BSD-3-Clause License
+// (C) 1f349 2026 - BSD-3-Clause License
 
 package config
 
@@ -19,4 +19,8 @@ func (sc *SigConfig) KeyHash(hash hash.Hash) []byte {
 		sc.keyHash = hash.Sum(nil)
 	}
 	return sc.keyHash
+}
+
+func (sc *SigConfig) Valid() bool {
+	return sc.Key != nil && sc.Data != nil
 }

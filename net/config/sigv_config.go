@@ -1,4 +1,4 @@
-// (C) 1f349 2025 - BSD-3-Clause License
+// (C) 1f349 2026 - BSD-3-Clause License
 
 package config
 
@@ -9,7 +9,7 @@ import (
 
 // SigVerifierConfig used to represent a verification key to check received singatures
 type SigVerifierConfig struct {
-	SigDataHash   hash.Hash
+	SigDataHash   func() hash.Hash
 	Scheme        crypto.SigScheme
 	PublicKeyData []byte
 	publicKeyHash []byte
