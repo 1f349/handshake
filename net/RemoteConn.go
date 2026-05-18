@@ -1,62 +1,99 @@
-// (C) 1f349 2025 - BSD-3-Clause License
+// (C) 1f349 2026 - BSD-3-Clause License
 
 package net
 
 import (
+	"errors"
 	"github.com/1f349/handshake/net/config"
 	"github.com/1f349/handshake/net/packets"
 	"github.com/1f349/queue"
 	"net"
+	"runtime"
 	"sync"
+	"time"
 )
 
 func NewRemoteConn(conn net.Conn) HandshakeConn {
-	return NewRemoteConnWithConfig(conn, config.NodeConfig{}, config.SigConfig{}, nil)
+	return NewRemoteConnWithConfig(conn, &config.NodeConfig{}, &config.SigConfig{}, nil, &config.KemTableConfig{})
 }
 
-func NewRemoteConnWithConfig(conn net.Conn, settings config.NodeConfig, presentedSig config.SigConfig, sigVerifiers []config.SigVerifierConfig) HandshakeConn {
-	return &RemoteConn{
+func NewRemoteConnWithConfig(conn net.Conn, settings *config.NodeConfig, presentedSig *config.SigConfig, sigVerifiers []*config.SigVerifierConfig, knownKEMTable *config.KemTableConfig) HandshakeConn {
+	return &remoteConn{
 		Conn:             conn,
 		finishChannel:    make(chan bool),
 		cancelledChannel: make(chan struct{}),
 		cancelWaitCond:   sync.NewCond(&sync.Mutex{}),
-		sendQueue: queue.NewQueue[struct {
-			packets.PacketHeader
-			packets.PacketPayload
-		}](),
+		sendQueue:        queue.NewQueue[sendItem](),
 		handshakeLock:    &sync.Mutex{},
-		handshakePhase:   packets.ZeroReservedPacketType,
+		handshakePhase:   NoPhase,
 		settings:         settings,
 		presentSignature: presentedSig,
 		verifySignature:  sigVerifiers,
+		kemTable:         knownKEMTable,
+		errorChannel:     make(chan error, 1),
+		/*
+			validDuration:    time.Second * 10,
+		*/
 	}
 }
 
-type RemoteConn struct {
+type remoteConn struct {
 	net.Conn
-	settings         config.NodeConfig
-	presentSignature config.SigConfig
-	verifySignature  []config.SigVerifierConfig
+	settings         *config.NodeConfig
+	presentSignature *config.SigConfig
+	verifySignature  []*config.SigVerifierConfig
+	kemTable         *config.KemTableConfig
 	finishChannel    chan bool
 	cancelledChannel chan struct{}
 	cancelWaitCond   *sync.Cond
-	sendQueue        queue.Queue[struct {
-		packets.PacketHeader
-		packets.PacketPayload
-	}]
-	handshakeLock  *sync.Mutex
-	handshakePhase packets.PacketType
-	localSecret    []byte
-	remoteSecret   []byte
+	sendQueue        queue.Queue[sendItem]
+	handshakeLock    *sync.Mutex
+	handshakePhase   packets.PacketType
+	localSecret      []byte
+	remoteSecret     []byte
+	errorChannel     chan error
+	/*
+		validDuration    time.Duration
+		connID           [16]byte
+	*/
 }
 
-func (r *RemoteConn) Handshaking() bool {
+/*
+func (r *remoteConn) GetValidDuration() time.Duration {
+	r.handshakeLock.Lock()
+	defer r.handshakeLock.Unlock()
+	return r.validDuration
+}
+
+func (r *remoteConn) SetValidDuration(duration time.Duration) HandshakeConn {
+	r.handshakeLock.Lock()
+	defer r.handshakeLock.Unlock()
+	r.validDuration = duration
+	return r
+}
+
+func (r *remoteConn) GetConnectionUUID() [16]byte {
+	r.handshakeLock.Lock()
+	defer r.handshakeLock.Unlock()
+	return r.connID
+}
+
+func (r *remoteConn) SetConnectionUUID(uuid [16]byte) HandshakeConn {
+	r.handshakeLock.Lock()
+	defer r.handshakeLock.Unlock()
+	r.connID = uuid
+	return r
+}
+
+*/
+
+func (r *remoteConn) Handshaking() bool {
 	return r.handshakePhase == packets.ZeroReservedPacketType ||
 		r.handshakePhase > packets.FinalProofPacketType
 }
 
 // GetLocalSecret the secret received from the local node (That is remote to this node)
-func (r *RemoteConn) GetLocalSecret() []byte {
+func (r *remoteConn) GetLocalSecret() []byte {
 	r.handshakeLock.Lock()
 	defer r.handshakeLock.Unlock()
 	sTR := make([]byte, len(r.localSecret))
@@ -65,7 +102,7 @@ func (r *RemoteConn) GetLocalSecret() []byte {
 }
 
 // GetRemoteSecret the secret of this node
-func (r *RemoteConn) GetRemoteSecret() []byte {
+func (r *remoteConn) GetRemoteSecret() []byte {
 	r.handshakeLock.Lock()
 	defer r.handshakeLock.Unlock()
 	sTR := make([]byte, len(r.remoteSecret))
@@ -73,9 +110,10 @@ func (r *RemoteConn) GetRemoteSecret() []byte {
 	return sTR
 }
 
+/*
 // SetNodeSecret sets the secret this node uses (Remote Secret)
 // Can only be modified before a handshake; calls are ignored after.
-func (r *RemoteConn) SetNodeSecret(secret []byte) HandshakeConn {
+func (r *remoteConn) SetNodeSecret(secret []byte) HandshakeConn {
 	r.handshakeLock.Lock()
 	defer r.handshakeLock.Unlock()
 	if r.handshakePhase == packets.ZeroReservedPacketType {
@@ -83,77 +121,161 @@ func (r *RemoteConn) SetNodeSecret(secret []byte) HandshakeConn {
 	}
 	return r
 }
+*/
 
-func (r *RemoteConn) GetSettings() config.NodeConfig {
+func (r *remoteConn) GetSettings() *config.NodeConfig {
 	return r.settings
 }
 
-func (r *RemoteConn) SetSettings(config config.NodeConfig) HandshakeConn {
-	r.handshakeLock.Lock()
-	defer r.handshakeLock.Unlock()
-	r.settings = config
-	return r
-}
-
-func (r *RemoteConn) GetPresentedSignatureSettings() config.SigConfig {
+func (r *remoteConn) GetPresentedSignatureSettings() *config.SigConfig {
 	return r.presentSignature
 }
 
-func (r *RemoteConn) SetPresentedSignatureSettings(config config.SigConfig) HandshakeConn {
-	r.handshakeLock.Lock()
-	defer r.handshakeLock.Unlock()
-	r.presentSignature = config
-	return r
-}
-
-func (r *RemoteConn) GetSignatureVerificationSettings() []config.SigVerifierConfig {
+func (r *remoteConn) GetSignatureVerificationSettings() []*config.SigVerifierConfig {
 	return r.verifySignature
 }
 
-func (r *RemoteConn) SetSignatureVerificationSettings(configs []config.SigVerifierConfig) HandshakeConn {
+func (r *remoteConn) SetSignatureVerificationSettings(configs []*config.SigVerifierConfig) HandshakeConn {
 	r.handshakeLock.Lock()
 	defer r.handshakeLock.Unlock()
 	r.verifySignature = configs
 	return r
 }
-func (r *RemoteConn) sendPump() {
-	a := r.sendQueue.Pop()
-	if a == nil {
 
-	}
-	//TODO: implement me
+func (r *remoteConn) GetKnownKEMTable() *config.KemTableConfig {
+	return r.kemTable
 }
 
-func (r *RemoteConn) cancelWaiter() {
+func (r *remoteConn) sendPump(marshaller *packets.PacketMarshaller) {
+	defer r.sendQueue.Clear()
+	for {
+		toSend := r.sendQueue.Pop()
+		if toSend == nil {
+			return
+		}
+		err := marshaller.Marshal(toSend.header, toSend.payload)
+		if err != nil {
+			select {
+			case r.errorChannel <- err:
+			default:
+			}
+			return
+		}
+		if toSend.header.ID == packets.ConnectionRejectedPacketType {
+			r.handshakePhase = toSend.header.ID
+			r.broadcastCancel()
+			select {
+			case r.finishChannel <- false:
+			default:
+			}
+			return
+		}
+	}
+}
+
+func (r *remoteConn) cancelWaiter() {
+	defer close(r.cancelledChannel)
+	defer r.sendQueue.StartUnBlocking()
 	select {
 	case cancelled := <-r.finishChannel:
 		if cancelled {
-
+			r.handshakePhase = packets.ConnectionRejectedPacketType
+			r.broadcastCancel()
+			r.sendQueue.Enqueue(sendItem{
+				header: packets.PacketHeader{
+					ID:             packets.ConnectionRejectedPacketType,
+					ConnectionUUID: r.settings.ConnID,
+					Time:           time.Now(),
+				},
+				payload: &packets.EmptyPayload{},
+			})
 		}
-		//TODO: implement me
 	}
 }
 
-func (r *RemoteConn) Handshake() error {
-	go r.sendPump()
-	go r.cancelWaiter()
-	panic("implement me")
+func (r *remoteConn) broadcastCancel() {
+	r.cancelWaitCond.L.Lock()
+	defer r.cancelWaitCond.L.Unlock()
+	r.cancelWaitCond.Broadcast()
 }
 
-func (r *RemoteConn) HandshakeCompleted() bool {
+func (r *remoteConn) Handshake(marshaller *packets.PacketMarshaller) error {
+	r.handshakeLock.Lock()
+	defer r.handshakeLock.Unlock()
+	func() {
+		r.cancelWaitCond.L.Lock()
+		defer r.cancelWaitCond.L.Unlock()
+		r.handshakePhase = packets.ZeroReservedPacketType
+	}()
+	r.sendQueue.EndUnBlocking()
+	select {
+	case <-r.errorChannel:
+	default:
+	}
+	go r.sendPump(marshaller)
+	go r.cancelWaiter()
+	for {
+		recvHeader, recvPayload, err := marshaller.Unmarshal()
+		if err != nil {
+			if errors.Is(err, packets.ErrFragmentReceived) || errors.Is(err, packets.ErrFragmentIndexOutOfRange) {
+				continue
+			}
+			select {
+			case r.errorChannel <- err:
+			default:
+			}
+			break
+		}
+		runtime.KeepAlive(recvPayload) //TODO: Remove once used
+		if recvHeader.ConnectionUUID == r.settings.ConnID &&
+			!time.Now().Add(-r.settings.ValidDuration).After(recvHeader.Time) &&
+			!time.Now().Add(r.settings.ValidDuration).Before(recvHeader.Time) {
+			switch recvHeader.ID {
+			case packets.ConnectionRejectedPacketType:
+				select {
+				case r.finishChannel <- false:
+				default:
+				}
+				break
+			case packets.InitPacketType:
+			case packets.FinalProofPacketType:
+			case packets.PublicKeyDataPacketType:
+			case packets.SignatureRequestPacketType:
+			case packets.PublicKeySignedPacketType:
+			case packets.SignaturePublicKeyRequestPacketType:
+			case packets.SignedPacketPublicKeyPacketType:
+				//TODO : Implement me
+			}
+		}
+	}
+	select {
+	case err := <-r.errorChannel:
+		r.handshakePhase = packets.ConnectionRejectedPacketType
+		r.broadcastCancel()
+		return err
+	default:
+		return nil
+	}
+}
+
+func (r *remoteConn) HandshakeCompleted() bool {
 	return r.handshakePhase == packets.InitProofPacketType
 }
 
-func (r *RemoteConn) HandshakeFailed() bool {
+func (r *remoteConn) HandshakeFailed() bool {
 	return r.handshakePhase == packets.ConnectionRejectedPacketType
 }
 
-func (r *RemoteConn) WaitForHandshakeCompletion() {
-	panic("implement me")
+func (r *remoteConn) WaitForHandshakeCompletion() {
+	r.cancelWaitCond.L.Lock()
+	defer r.cancelWaitCond.L.Unlock()
+	for r.Handshaking() {
+		r.cancelWaitCond.Wait()
+	}
 }
 
-func (r *RemoteConn) CancelHandshake() {
-	if !r.HandshakeCompleted() && !r.HandshakeFailed() {
+func (r *remoteConn) CancelHandshake() {
+	if r.Handshaking() {
 		select {
 		case r.finishChannel <- true:
 		case <-r.cancelledChannel:
