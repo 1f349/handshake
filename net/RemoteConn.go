@@ -13,11 +13,7 @@ import (
 	"time"
 )
 
-func NewRemoteConn(conn net.Conn) HandshakeConn {
-	return NewRemoteConnWithConfig(conn, &config.NodeConfig{}, &config.SigConfig{}, nil, &config.KemTableConfig{})
-}
-
-func NewRemoteConnWithConfig(conn net.Conn, settings *config.NodeConfig, presentedSig *config.SigConfig, sigVerifiers []*config.SigVerifierConfig, knownKEMTable *config.KemTableConfig) HandshakeConn {
+func NewRemoteConnWithConfig(conn net.Conn, settings *config.NodeConfig, presentedSig *config.SigConfig, sigVerifiers []*config.SigVerifierConfig, knownKEMTable config.KemTableConfig) HandshakeConn {
 	return &remoteConn{
 		Conn:             conn,
 		finishChannel:    make(chan bool),
@@ -42,7 +38,7 @@ type remoteConn struct {
 	settings         *config.NodeConfig
 	presentSignature *config.SigConfig
 	verifySignature  []*config.SigVerifierConfig
-	kemTable         *config.KemTableConfig
+	kemTable         config.KemTableConfig
 	finishChannel    chan bool
 	cancelledChannel chan struct{}
 	cancelWaitCond   *sync.Cond
@@ -142,8 +138,15 @@ func (r *remoteConn) SetSignatureVerificationSettings(configs []*config.SigVerif
 	return r
 }
 
-func (r *remoteConn) GetKnownKEMTable() *config.KemTableConfig {
+func (r *remoteConn) GetKnownKEMTable() config.KemTableConfig {
 	return r.kemTable
+}
+
+func (r *remoteConn) SetKnownKEMTable(kemTable config.KemTableConfig) HandshakeConn {
+	r.handshakeLock.Lock()
+	defer r.handshakeLock.Unlock()
+	r.kemTable = kemTable
+	return r
 }
 
 func (r *remoteConn) sendPump(marshaller *packets.PacketMarshaller) {

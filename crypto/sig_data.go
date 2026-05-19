@@ -35,9 +35,7 @@ func GetSignedDataPayload(publicKey []byte, issueTime, expiryTime time.Time, has
 		return nil
 	}
 	if hash != nil {
-		hash.Reset()
-		hash.Write(buff.Bytes())
-		return hash.Sum(nil)
+		return HashBytes(buff.Bytes(), hash)
 	}
 	return buff.Bytes()
 }

@@ -19,15 +19,12 @@ type SigVerifierConfig struct {
 // PublicKeyHash generates from public key data
 func (svc *SigVerifierConfig) PublicKeyHash(hash hash.Hash) []byte {
 	if svc.publicKeyHash == nil {
-		hash.Reset()
-		hash.Write(svc.PublicKeyData)
-		svc.publicKeyHash = hash.Sum(nil)
+		svc.publicKeyHash = crypto.HashBytes(svc.PublicKeyData, hash)
 	}
 	return svc.publicKeyHash
 }
 
 // PublicKey constructed from public key data, nil on failure
-// LastError contains the error that caused a failure
 func (svc *SigVerifierConfig) PublicKey() crypto.SigPublicKey {
 	if svc.publicKey == nil {
 		var err error
@@ -37,4 +34,9 @@ func (svc *SigVerifierConfig) PublicKey() crypto.SigPublicKey {
 		}
 	}
 	return svc.publicKey
+}
+
+// Valid checks if SigDataHash, Scheme and PublicKeyData fields are not nil; does not check signature validation
+func (svc *SigVerifierConfig) Valid() bool {
+	return svc.SigDataHash != nil && svc.Scheme != nil && svc.PublicKeyData != nil
 }

@@ -169,6 +169,7 @@ func PacketDataHash(packetHeader PacketHeader, payload PacketPayload, h hash.Has
 		return nil
 	}
 	_, err = payload.WriteTo(h)
+	defer h.Reset()
 	if err != nil {
 		return nil
 	}
@@ -185,5 +186,6 @@ func BinaryMarshalHash(bMarshal encoding.BinaryMarshaler, h hash.Hash) []byte {
 		return nil
 	}
 	h.Write(bts)
+	defer h.Reset()
 	return h.Sum(nil)
 }

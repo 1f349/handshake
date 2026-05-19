@@ -5,6 +5,7 @@ package net
 import (
 	"crypto/hmac"
 	"errors"
+	"github.com/1f349/handshake/crypto"
 	"github.com/1f349/handshake/net/config"
 	"github.com/1f349/handshake/net/packets"
 	"github.com/1f349/queue"
@@ -14,11 +15,7 @@ import (
 	"time"
 )
 
-func NewLocalConn(conn net.Conn) HandshakeConn {
-	return NewLocalConnWithConfig(conn, &config.NodeConfig{}, &config.SigConfig{}, nil, &config.KemTableConfig{})
-}
-
-func NewLocalConnWithConfig(conn net.Conn, settings *config.NodeConfig, presentedSig *config.SigConfig, sigVerifiers []*config.SigVerifierConfig, knownKEMTable *config.KemTableConfig) HandshakeConn {
+func NewLocalConnWithConfig(conn net.Conn, settings *config.NodeConfig, presentedSig *config.SigConfig, sigVerifiers []*config.SigVerifierConfig, knownKEMTable config.KemTableConfig) HandshakeConn {
 	return &localConn{
 		Conn:             conn,
 		finishChannel:    make(chan bool),
@@ -44,7 +41,7 @@ type localConn struct {
 	settings         *config.NodeConfig
 	presentSignature *config.SigConfig
 	verifySignature  []*config.SigVerifierConfig
-	kemTable         *config.KemTableConfig
+	kemTable         config.KemTableConfig
 	finishChannel    chan bool
 	cancelledChannel chan struct{}
 	cancelWaitCond   *sync.Cond
@@ -144,8 +141,15 @@ func (l *localConn) SetSignatureVerificationSettings(configs []*config.SigVerifi
 	return l
 }
 
-func (l *localConn) GetKnownKEMTable() *config.KemTableConfig {
+func (l *localConn) GetKnownKEMTable() config.KemTableConfig {
 	return l.kemTable
+}
+
+func (l *localConn) SetKnownKEMTable(kemTable config.KemTableConfig) HandshakeConn {
+	l.handshakeLock.Lock()
+	defer l.handshakeLock.Unlock()
+	l.kemTable = kemTable
+	return l
 }
 
 func (l *localConn) sendPump(marshaller *packets.PacketMarshaller) {
@@ -201,15 +205,30 @@ func (l *localConn) broadcastCancel() {
 	l.cancelWaitCond.Broadcast()
 }
 
-func (l *localConn) getInitPayload() (*packets.InitPayload, error) {
+func (l *localConn) getInitPayload() (*packets.InitPayload, packets.PacketType, error) { // 2
 	var err error
-	p := &packets.InitPayload{PublicKeyHash: l.settings.GetPublicKeyHash(l.settings.KeyCheckHash())}
-	l.localSecret, err = p.Encapsulate(l.settings.GetPrivateKey().Public())
-	if err != nil {
-		return nil, err
+	pret := packets.InitPacketType
+	p := &packets.InitPayload{}
+	if !l.settings.RequestLocalPublicKey {
+		p.PublicKeyHash = l.settings.GetPublicKeyHash(l.settings.KeyCheckHash()) // 2(B)
+		pret = Init2BPhase
 	}
-	p.PacketHasher = hmac.New(l.settings.HMACHash, l.localSecret)
-	return p, nil
+	var rpk crypto.KemPublicKey
+	rpk, err = l.kemTable.GetRemoteKey()
+	if err == nil { // 2
+		l.localSecret, err = p.Encapsulate(rpk)
+		if err != nil {
+			return nil, packets.ConnectionRejectedPacketType, err
+		}
+		p.PacketHasher = hmac.New(l.settings.HMACHash, l.localSecret)
+	} else { // 2(A)
+		if pret == packets.InitPacketType {
+			pret = Init2APhase
+		} else {
+			pret = Init2ABPhase
+		}
+	}
+	return p, pret, nil
 }
 
 func (l *localConn) Handshake(marshaller *packets.PacketMarshaller) error {
@@ -225,12 +244,12 @@ func (l *localConn) Handshake(marshaller *packets.PacketMarshaller) error {
 	case <-l.errorChannel:
 	default:
 	}
-	ipp, err := l.getInitPayload()
+	ipp, pktyp, err := l.getInitPayload()
 	if err != nil {
 		l.broadcastCancel()
 		return err
 	}
-	l.handshakePhase = packets.InitPacketType
+	l.handshakePhase = pktyp
 	l.sendQueue.Enqueue(sendItem{
 		header:  packets.PacketHeader{ID: packets.InitPacketType, ConnectionUUID: l.settings.ConnID, Time: time.Now()},
 		payload: ipp,

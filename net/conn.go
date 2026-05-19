@@ -9,6 +9,9 @@ import (
 )
 
 const NoPhase = packets.PacketType(129)
+const Init2APhase = packets.PacketType(133)
+const Init2BPhase = packets.PacketType(135)
+const Init2ABPhase = packets.PacketType(137)
 
 // HandshakeConn provides a generic handshake wrapper for a net.Conn
 type HandshakeConn interface {
@@ -23,7 +26,8 @@ type HandshakeConn interface {
 	GetPresentedSignatureSettings() *config.SigConfig
 	GetSignatureVerificationSettings() []*config.SigVerifierConfig
 	SetSignatureVerificationSettings(configs []*config.SigVerifierConfig) HandshakeConn
-	GetKnownKEMTable() *config.KemTableConfig
+	GetKnownKEMTable() config.KemTableConfig
+	SetKnownKEMTable(config.KemTableConfig) HandshakeConn
 	GetLocalSecret() []byte
 	GetRemoteSecret() []byte
 	/*
