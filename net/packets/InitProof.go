@@ -14,7 +14,7 @@ const InitProofPacketType = PacketType(3)
 type InitProofPayload struct {
 	encapsulation []byte
 	ProofHMAC     []byte
-	// PacketHash contains the hash of the packet when sent by a PacketMarshaller with its header information using PacketHasher
+	// PacketHash contains the hash of the packet when sent by a PacketMarshal with its header information using PacketHasher
 	PacketHash   []byte
 	PacketHasher hash.Hash
 }

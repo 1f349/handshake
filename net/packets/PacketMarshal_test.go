@@ -61,7 +61,7 @@ func TestPacketMarshalFragmentedSmallMTU(t *testing.T) {
 }
 
 func sharedPacketMarshalTest(t *testing.T, transport io.ReadWriter, mtu uint) {
-	marshal := &PacketMarshaller{
+	marshal := &HandshakePacketMarshaller{
 		Conn: transport,
 		MTU:  mtu,
 	}
@@ -250,7 +250,7 @@ func emptyPayloadChecker(PacketPayload, PacketPayload) bool {
 	return true
 }
 
-func readOnePayload(t *testing.T, marshal *PacketMarshaller) (*PacketHeader, PacketPayload) {
+func readOnePayload(t *testing.T, marshal *HandshakePacketMarshaller) (*PacketHeader, PacketPayload) {
 	var rHeader *PacketHeader
 	var rPayload PacketPayload
 	err := ErrFragmentReceived
@@ -263,7 +263,7 @@ func readOnePayload(t *testing.T, marshal *PacketMarshaller) (*PacketHeader, Pac
 	return rHeader, rPayload
 }
 
-func testOnePayload(t *testing.T, name string, marshal *PacketMarshaller, header PacketHeader, payload PacketPayload, payloadChecker func(o PacketPayload, r PacketPayload) bool) {
+func testOnePayload(t *testing.T, name string, marshal *HandshakePacketMarshaller, header PacketHeader, payload PacketPayload, payloadChecker func(o PacketPayload, r PacketPayload) bool) {
 	t.Run(name, func(t *testing.T) {
 		err := marshal.Marshal(header, payload)
 		assert.NoError(t, err)

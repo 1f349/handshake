@@ -9,15 +9,14 @@ import (
 	"github.com/1f349/handshake/net/config"
 	"github.com/1f349/handshake/net/packets"
 	"github.com/1f349/queue"
-	"net"
 	"runtime"
 	"sync"
 	"time"
 )
 
-func NewLocalConnWithConfig(conn net.Conn, settings *config.NodeConfig, presentedSig *config.SigConfig, sigVerifiers []*config.SigVerifierConfig, knownKEMTable config.KemTableConfig) HandshakeConn {
-	return &localConn{
-		Conn:             conn,
+func NewLocalHandshakerWithConfig(marshal packets.PacketMarshal, settings *config.NodeConfig, presentedSig *config.SigConfig, sigVerifiers []*config.SigVerifierConfig, knownKEMTable config.KemTableConfig) HandshakeProcessor {
+	return &localHandshake{
+		marshal:          marshal,
 		finishChannel:    make(chan bool),
 		cancelledChannel: make(chan struct{}),
 		cancelWaitCond:   sync.NewCond(&sync.Mutex{}),
@@ -36,8 +35,8 @@ func NewLocalConnWithConfig(conn net.Conn, settings *config.NodeConfig, presente
 	}
 }
 
-type localConn struct {
-	net.Conn
+type localHandshake struct {
+	marshal          packets.PacketMarshal
 	settings         *config.NodeConfig
 	presentSignature *config.SigConfig
 	verifySignature  []*config.SigVerifierConfig
@@ -58,26 +57,26 @@ type localConn struct {
 }
 
 /*
-func (l *localConn) GetValidDuration() time.Duration {
+func (l *localHandshake) GetValidDuration() time.Duration {
 	l.handshakeLock.Lock()
 	defer l.handshakeLock.Unlock()
 	return l.validDuration
 }
 
-func (l *localConn) SetValidDuration(duration time.Duration) HandshakeConn {
+func (l *localHandshake) SetValidDuration(duration time.Duration) HandshakeProcessor {
 	l.handshakeLock.Lock()
 	defer l.handshakeLock.Unlock()
 	l.validDuration = duration
 	return l
 }
 
-func (l *localConn) GetConnectionUUID() [16]byte {
+func (l *localHandshake) GetConnectionUUID() [16]byte {
 	l.handshakeLock.Lock()
 	defer l.handshakeLock.Unlock()
 	return l.connID
 }
 
-func (l *localConn) SetConnectionUUID(uuid [16]byte) HandshakeConn {
+func (l *localHandshake) SetConnectionUUID(uuid [16]byte) HandshakeProcessor {
 	l.handshakeLock.Lock()
 	defer l.handshakeLock.Unlock()
 	l.connID = uuid
@@ -85,14 +84,26 @@ func (l *localConn) SetConnectionUUID(uuid [16]byte) HandshakeConn {
 }
 */
 
-func (l *localConn) Handshaking() bool {
+func (l *localHandshake) GetPacketMarshal() packets.PacketMarshal {
+	l.handshakeLock.Lock()
+	defer l.handshakeLock.Unlock()
+	return l.marshal
+}
+
+func (l *localHandshake) SetPacketMarshal(marshal packets.PacketMarshal) {
+	l.handshakeLock.Lock()
+	defer l.handshakeLock.Unlock()
+	l.marshal = marshal
+}
+
+func (l *localHandshake) Handshaking() bool {
 	return l.handshakePhase == packets.ZeroReservedPacketType ||
 		l.handshakePhase == packets.InitPacketType ||
 		l.handshakePhase > packets.FinalProofPacketType
 }
 
 // GetLocalSecret the secret of this node
-func (l *localConn) GetLocalSecret() []byte {
+func (l *localHandshake) GetLocalSecret() []byte {
 	l.handshakeLock.Lock()
 	defer l.handshakeLock.Unlock()
 	sTR := make([]byte, len(l.localSecret))
@@ -101,7 +112,7 @@ func (l *localConn) GetLocalSecret() []byte {
 }
 
 // GetRemoteSecret the secret received from the remote node
-func (l *localConn) GetRemoteSecret() []byte {
+func (l *localHandshake) GetRemoteSecret() []byte {
 	l.handshakeLock.Lock()
 	defer l.handshakeLock.Unlock()
 	sTR := make([]byte, len(l.remoteSecret))
@@ -112,7 +123,7 @@ func (l *localConn) GetRemoteSecret() []byte {
 /*
 // SetNodeSecret sets the secret this node uses (Local Secret)
 // Can only be modified before a handshake; calls are ignored after.
-func (l *localConn) SetNodeSecret(secret []byte) HandshakeConn {
+func (l *localHandshake) SetNodeSecret(secret []byte) HandshakeProcessor {
 	l.handshakeLock.Lock()
 	defer l.handshakeLock.Unlock()
 	if l.handshakePhase == packets.ZeroReservedPacketType || l.handshakePhase == packets.InitPacketType {
@@ -122,44 +133,44 @@ func (l *localConn) SetNodeSecret(secret []byte) HandshakeConn {
 }
 */
 
-func (l *localConn) GetSettings() *config.NodeConfig {
+func (l *localHandshake) GetSettings() *config.NodeConfig {
 	return l.settings
 }
 
-func (l *localConn) GetPresentedSignatureSettings() *config.SigConfig {
+func (l *localHandshake) GetPresentedSignatureSettings() *config.SigConfig {
 	return l.presentSignature
 }
 
-func (l *localConn) GetSignatureVerificationSettings() []*config.SigVerifierConfig {
+func (l *localHandshake) GetSignatureVerificationSettings() []*config.SigVerifierConfig {
 	return l.verifySignature
 }
 
-func (l *localConn) SetSignatureVerificationSettings(configs []*config.SigVerifierConfig) HandshakeConn {
+func (l *localHandshake) SetSignatureVerificationSettings(configs []*config.SigVerifierConfig) HandshakeProcessor {
 	l.handshakeLock.Lock()
 	defer l.handshakeLock.Unlock()
 	l.verifySignature = configs
 	return l
 }
 
-func (l *localConn) GetKnownKEMTable() config.KemTableConfig {
+func (l *localHandshake) GetKnownKEMTable() config.KemTableConfig {
 	return l.kemTable
 }
 
-func (l *localConn) SetKnownKEMTable(kemTable config.KemTableConfig) HandshakeConn {
+func (l *localHandshake) SetKnownKEMTable(kemTable config.KemTableConfig) HandshakeProcessor {
 	l.handshakeLock.Lock()
 	defer l.handshakeLock.Unlock()
 	l.kemTable = kemTable
 	return l
 }
 
-func (l *localConn) sendPump(marshaller *packets.PacketMarshaller) {
+func (l *localHandshake) sendPump() {
 	defer l.sendQueue.Clear()
 	for {
 		toSend := l.sendQueue.Pop()
 		if toSend == nil {
 			return
 		}
-		err := marshaller.Marshal(toSend.header, toSend.payload)
+		err := l.marshal.Marshal(toSend.header, toSend.payload)
 		if err != nil {
 			select {
 			case l.errorChannel <- err:
@@ -179,7 +190,7 @@ func (l *localConn) sendPump(marshaller *packets.PacketMarshaller) {
 	}
 }
 
-func (l *localConn) cancelWaiter() {
+func (l *localHandshake) cancelWaiter() {
 	defer close(l.cancelledChannel)
 	defer l.sendQueue.StartUnBlocking()
 	select {
@@ -199,13 +210,13 @@ func (l *localConn) cancelWaiter() {
 	}
 }
 
-func (l *localConn) broadcastCancel() {
+func (l *localHandshake) broadcastCancel() {
 	l.cancelWaitCond.L.Lock()
 	defer l.cancelWaitCond.L.Unlock()
 	l.cancelWaitCond.Broadcast()
 }
 
-func (l *localConn) getInitPayload() (*packets.InitPayload, packets.PacketType, error) { // 2
+func (l *localHandshake) getInitPayload() (*packets.InitPayload, packets.PacketType, error) { // 2
 	var err error
 	pret := packets.InitPacketType
 	p := &packets.InitPayload{}
@@ -231,9 +242,12 @@ func (l *localConn) getInitPayload() (*packets.InitPayload, packets.PacketType, 
 	return p, pret, nil
 }
 
-func (l *localConn) Handshake(marshaller *packets.PacketMarshaller) error {
+func (l *localHandshake) Handshake() error {
 	l.handshakeLock.Lock()
 	defer l.handshakeLock.Unlock()
+	/*if l.HandshakeFailed() || l.HandshakeCompleted() {
+		return ErrHandshakeDone
+	}*/
 	func() {
 		l.cancelWaitCond.L.Lock()
 		defer l.cancelWaitCond.L.Unlock()
@@ -254,10 +268,10 @@ func (l *localConn) Handshake(marshaller *packets.PacketMarshaller) error {
 		header:  packets.PacketHeader{ID: packets.InitPacketType, ConnectionUUID: l.settings.ConnID, Time: time.Now()},
 		payload: ipp,
 	})
-	go l.sendPump(marshaller)
+	go l.sendPump()
 	go l.cancelWaiter()
 	for {
-		recvHeader, recvPayload, err := marshaller.Unmarshal()
+		recvHeader, recvPayload, err := l.marshal.Unmarshal()
 		if err != nil {
 			if errors.Is(err, packets.ErrFragmentReceived) {
 				continue
@@ -300,15 +314,15 @@ func (l *localConn) Handshake(marshaller *packets.PacketMarshaller) error {
 	}
 }
 
-func (l *localConn) HandshakeCompleted() bool {
+func (l *localHandshake) HandshakeCompleted() bool {
 	return l.handshakePhase == packets.FinalProofPacketType
 }
 
-func (l *localConn) HandshakeFailed() bool {
+func (l *localHandshake) HandshakeFailed() bool {
 	return l.handshakePhase == packets.ConnectionRejectedPacketType
 }
 
-func (l *localConn) WaitForHandshakeCompletion() {
+func (l *localHandshake) WaitForHandshakeCompletion() {
 	l.cancelWaitCond.L.Lock()
 	defer l.cancelWaitCond.L.Unlock()
 	for l.Handshaking() {
@@ -316,7 +330,7 @@ func (l *localConn) WaitForHandshakeCompletion() {
 	}
 }
 
-func (l *localConn) CancelHandshake() {
+func (l *localHandshake) CancelHandshake() {
 	if l.Handshaking() {
 		select {
 		case l.finishChannel <- true:

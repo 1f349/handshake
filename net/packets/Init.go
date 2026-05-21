@@ -19,7 +19,7 @@ type InitPayload struct {
 	encapsulation []byte
 	// PublicKeyHash hash of the local crypto.KemPublicKey
 	PublicKeyHash []byte
-	// PacketHash contains the hash of the packet when sent by a PacketMarshaller with its header information using PacketHasher
+	// PacketHash contains the hash of the packet when sent by a PacketMarshal with its header information using PacketHasher
 	PacketHash   []byte
 	PacketHasher hash.Hash
 }

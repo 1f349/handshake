@@ -26,7 +26,22 @@ type PacketPayload interface {
 	SetCompleteHash([]byte)
 }
 
-type PacketMarshaller struct {
+// PacketMarshal provides an interface for sending and receiving packets from an underlying io.ReadWriter
+type PacketMarshal interface {
+	Unmarshal() (packetHeader *PacketHeader, packetPayload PacketPayload, err error)
+	Marshal(packetHeader PacketHeader, payload PacketPayload) error
+	ClearFragmentCache()
+	// GetMTU 0 means no length limit and no fragmentation
+	GetMTU() uint
+	// SetMTU 0 means no length limit and no fragmentation
+	SetMTU(mtu uint)
+	GetConn() io.ReadWriter
+	SetConn(conn io.ReadWriter)
+}
+
+// HandshakePacketMarshaller provides an implimentation of PacketMarshal for sending and receiving
+// handshake packets from an underlying io.ReadWriter where other packet IDs give ErrInvalidPacketID
+type HandshakePacketMarshaller struct {
 	Conn io.ReadWriter
 	// MTU Conn, maximum transmission unit, makes sure packets get fragmented if needed and enables buffer support when > 0; if 0, there is no length limit and no fragmentation
 	MTU                    uint
@@ -35,7 +50,25 @@ type PacketMarshaller struct {
 	fragmentMutex          sync.Mutex
 }
 
-func (p *PacketMarshaller) Unmarshal() (packetHeader *PacketHeader, packetPayload PacketPayload, err error) {
+// GetMTU 0 means no length limit and no fragmentation
+func (p *HandshakePacketMarshaller) GetMTU() uint {
+	return p.MTU
+}
+
+// SetMTU 0 means no length limit and no fragmentation
+func (p *HandshakePacketMarshaller) SetMTU(mtu uint) {
+	p.MTU = mtu
+}
+
+func (p *HandshakePacketMarshaller) GetConn() io.ReadWriter {
+	return p.Conn
+}
+
+func (p *HandshakePacketMarshaller) SetConn(conn io.ReadWriter) {
+	p.Conn = conn
+}
+
+func (p *HandshakePacketMarshaller) Unmarshal() (packetHeader *PacketHeader, packetPayload PacketPayload, err error) {
 	packetHeader = &PacketHeader{}
 	var localConn io.ReadWriter
 	if p.MTU > 0 {
@@ -64,7 +97,7 @@ func (p *PacketMarshaller) Unmarshal() (packetHeader *PacketHeader, packetPayloa
 	}
 }
 
-func (p *PacketMarshaller) unmarshal(header PacketHeader, conn io.Reader) (*PacketHeader, PacketPayload, error) {
+func (p *HandshakePacketMarshaller) unmarshal(header PacketHeader, conn io.Reader) (*PacketHeader, PacketPayload, error) {
 	var pyld PacketPayload
 	switch header.ID {
 	case ConnectionRejectedPacketType, PublicKeyRequestPacketType, SignatureRequestPacketType, SignaturePublicKeyRequestPacketType:
@@ -91,7 +124,7 @@ func (p *PacketMarshaller) unmarshal(header PacketHeader, conn io.Reader) (*Pack
 	return header.Clone(), pyld, nil
 }
 
-func (p *PacketMarshaller) Marshal(packetHeader PacketHeader, payload PacketPayload) error {
+func (p *HandshakePacketMarshaller) Marshal(packetHeader PacketHeader, payload PacketPayload) error {
 	if p.MTU > 0 {
 		if HeaderSizeForFragmentation >= p.MTU {
 			return ErrMTUTooSmall
@@ -163,7 +196,7 @@ func (p *PacketMarshaller) Marshal(packetHeader PacketHeader, payload PacketPayl
 	return nil
 }
 
-func (p *PacketMarshaller) processFragment(f []byte, header PacketHeader) (*PacketHeader, PacketPayload, error) {
+func (p *HandshakePacketMarshaller) processFragment(f []byte, header PacketHeader) (*PacketHeader, PacketPayload, error) {
 	p.fragmentMutex.Lock()
 	defer p.fragmentMutex.Unlock()
 	if len(p.fragments) != int(header.fragmentCount) || !header.Equals(p.fragmentedPacketHeader) {
@@ -186,12 +219,12 @@ func (p *PacketMarshaller) processFragment(f []byte, header PacketHeader) (*Pack
 	return p.unmarshal(p.fragmentedPacketHeader, buff)
 }
 
-func (p *PacketMarshaller) clearFragmentCache() {
+func (p *HandshakePacketMarshaller) clearFragmentCache() {
 	p.fragments = nil
 	p.fragmentedPacketHeader.Clear()
 }
 
-func (p *PacketMarshaller) ClearFragmentCache() {
+func (p *HandshakePacketMarshaller) ClearFragmentCache() {
 	p.fragmentMutex.Lock()
 	defer p.fragmentMutex.Unlock()
 	p.clearFragmentCache()
