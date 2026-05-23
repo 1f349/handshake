@@ -26,8 +26,8 @@ type HandshakeProcessor interface {
 	Handshaking() bool
 	GetSettings() *config.NodeConfig
 	GetPresentedSignatureSettings() *config.SigConfig
-	GetSignatureVerificationSettings() []*config.SigVerifierConfig
-	SetSignatureVerificationSettings(configs []*config.SigVerifierConfig) HandshakeProcessor
+	GetSignatureVerificationTable() config.SigVerifierTableConfig
+	SetSignatureVerificationTable(configs config.SigVerifierTableConfig) HandshakeProcessor
 	GetKnownKEMTable() config.KemTableConfig
 	SetKnownKEMTable(config.KemTableConfig) HandshakeProcessor
 	GetLocalSecret() []byte

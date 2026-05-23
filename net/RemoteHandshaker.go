@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-func NewRemoteHandshakerWithConfig(marshal packets.PacketMarshal, settings *config.NodeConfig, presentedSig *config.SigConfig, sigVerifiers []*config.SigVerifierConfig, knownKEMTable config.KemTableConfig) HandshakeProcessor {
+func NewRemoteHandshakerWithConfig(marshal packets.PacketMarshal, settings *config.NodeConfig, presentedSig *config.SigConfig, sigVerifierTable config.SigVerifierTableConfig, knownKEMTable config.KemTableConfig) HandshakeProcessor {
 	return &remoteHandshake{
 		marshal:          marshal,
 		finishChannel:    make(chan bool),
@@ -23,7 +23,7 @@ func NewRemoteHandshakerWithConfig(marshal packets.PacketMarshal, settings *conf
 		handshakePhase:   NoPhase,
 		settings:         settings,
 		presentSignature: presentedSig,
-		verifySignature:  sigVerifiers,
+		verifySignature:  sigVerifierTable,
 		kemTable:         knownKEMTable,
 		errorChannel:     make(chan error, 1),
 		/*
@@ -36,7 +36,7 @@ type remoteHandshake struct {
 	marshal          packets.PacketMarshal
 	settings         *config.NodeConfig
 	presentSignature *config.SigConfig
-	verifySignature  []*config.SigVerifierConfig
+	verifySignature  config.SigVerifierTableConfig
 	kemTable         config.KemTableConfig
 	finishChannel    chan bool
 	cancelledChannel chan struct{}
@@ -138,11 +138,11 @@ func (r *remoteHandshake) GetPresentedSignatureSettings() *config.SigConfig {
 	return r.presentSignature
 }
 
-func (r *remoteHandshake) GetSignatureVerificationSettings() []*config.SigVerifierConfig {
+func (r *remoteHandshake) GetSignatureVerificationTable() config.SigVerifierTableConfig {
 	return r.verifySignature
 }
 
-func (r *remoteHandshake) SetSignatureVerificationSettings(configs []*config.SigVerifierConfig) HandshakeProcessor {
+func (r *remoteHandshake) SetSignatureVerificationTable(configs config.SigVerifierTableConfig) HandshakeProcessor {
 	r.handshakeLock.Lock()
 	defer r.handshakeLock.Unlock()
 	r.verifySignature = configs

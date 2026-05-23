@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-func NewLocalHandshakerWithConfig(marshal packets.PacketMarshal, settings *config.NodeConfig, presentedSig *config.SigConfig, sigVerifiers []*config.SigVerifierConfig, knownKEMTable config.KemTableConfig) HandshakeProcessor {
+func NewLocalHandshakerWithConfig(marshal packets.PacketMarshal, settings *config.NodeConfig, presentedSig *config.SigConfig, sigVerifierTable config.SigVerifierTableConfig, knownKEMTable config.KemTableConfig) HandshakeProcessor {
 	return &localHandshake{
 		marshal:          marshal,
 		finishChannel:    make(chan bool),
@@ -25,7 +25,7 @@ func NewLocalHandshakerWithConfig(marshal packets.PacketMarshal, settings *confi
 		handshakePhase:   NoPhase,
 		settings:         settings,
 		presentSignature: presentedSig,
-		verifySignature:  sigVerifiers,
+		verifySignature:  sigVerifierTable,
 		kemTable:         knownKEMTable,
 		errorChannel:     make(chan error, 1),
 		/*
@@ -39,7 +39,7 @@ type localHandshake struct {
 	marshal          packets.PacketMarshal
 	settings         *config.NodeConfig
 	presentSignature *config.SigConfig
-	verifySignature  []*config.SigVerifierConfig
+	verifySignature  config.SigVerifierTableConfig
 	kemTable         config.KemTableConfig
 	finishChannel    chan bool
 	cancelledChannel chan struct{}
@@ -141,11 +141,11 @@ func (l *localHandshake) GetPresentedSignatureSettings() *config.SigConfig {
 	return l.presentSignature
 }
 
-func (l *localHandshake) GetSignatureVerificationSettings() []*config.SigVerifierConfig {
+func (l *localHandshake) GetSignatureVerificationTable() config.SigVerifierTableConfig {
 	return l.verifySignature
 }
 
-func (l *localHandshake) SetSignatureVerificationSettings(configs []*config.SigVerifierConfig) HandshakeProcessor {
+func (l *localHandshake) SetSignatureVerificationTable(configs config.SigVerifierTableConfig) HandshakeProcessor {
 	l.handshakeLock.Lock()
 	defer l.handshakeLock.Unlock()
 	l.verifySignature = configs
