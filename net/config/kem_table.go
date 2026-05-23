@@ -15,9 +15,11 @@ var ErrMultipleKeys = errors.New("multiple keys for hash")
 // ErrNoKey when no key is found
 var ErrNoKey = errors.New("no key found")
 
+// ErrHashSizeMismatch when the provided hash is not the same as the hash used by the table
+var ErrHashSizeMismatch = errors.New("hash size mismatch")
+
 // KemTableConfig provides a configuration table of known KemPublicKeys
 type KemTableConfig interface {
-	add(publicKey crypto.KemPublicKey, publicKeyData []byte, remoteKey bool)
 	Import(publicKeyData []byte, remoteKey bool) error
 	Add(publicKey crypto.KemPublicKey, remoteKey bool) error
 	Clear()
@@ -30,24 +32,26 @@ type KemTableConfig interface {
 
 // NewKemTableConfig with the specified KemScheme and hashProvider for public key data processing
 func NewKemTableConfig(schema crypto.KemScheme, hashProvider func() hash.Hash) KemTableConfig {
-	return &kemTableConfig{schema: schema, store: make(map[string]*crypto.KemPublicKey), hash: hashProvider(), hashProvider: hashProvider}
+	return &kemTableConfig{schema: schema, store: make(map[string]*crypto.KemPublicKey), hash: hashProvider()}
 }
 
 type kemTableConfig struct {
 	hash                hash.Hash
-	hashProvider        func() hash.Hash
 	schema              crypto.KemScheme
 	lock                sync.RWMutex
 	store               map[string]*crypto.KemPublicKey
 	remotePublicKeyData string
 }
 
-// SetRemoteKeyData also allows nil to clear
+// SetRemoteKeyData also allows nil / len(0) byte slice to clear
 func (k *kemTableConfig) SetRemoteKeyData(remotePublicKeyData []byte) error {
 	k.lock.Lock()
 	defer k.lock.Unlock()
-	if remotePublicKeyData == nil {
+	if len(remotePublicKeyData) == 0 {
 		k.remotePublicKeyData = ""
+		return nil
+	}
+	if string(remotePublicKeyData) == k.remotePublicKeyData {
 		return nil
 	}
 	if _, found := k.store[string(remotePublicKeyData)]; !found {
@@ -126,10 +130,13 @@ func (k *kemTableConfig) Clear() {
 }
 
 // FindFromHash of the public key data
-func (k *kemTableConfig) FindFromHash(publicKeyData []byte) (crypto.KemPublicKey, error) {
+func (k *kemTableConfig) FindFromHash(hash []byte) (crypto.KemPublicKey, error) {
+	if len(hash) != k.hash.Size() {
+		return nil, ErrHashSizeMismatch
+	}
 	k.lock.RLock()
 	defer k.lock.RUnlock()
-	pk, found := k.store[string(crypto.HashBytes(publicKeyData, k.hashProvider()))]
+	pk, found := k.store[string(hash)]
 	if found {
 		if pk == nil {
 			return nil, ErrMultipleKeys
