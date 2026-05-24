@@ -3,16 +3,26 @@
 package net
 
 import (
+	"errors"
 	"github.com/1f349/handshake/net/config"
 	"github.com/1f349/handshake/net/packets"
 )
 
-//var ErrHandshakeDone = errors.New("handshake already done")
+// var ErrHandshakeDone = errors.New("handshake already done")
+
+// ErrInitProofFailed returned from HandshakeProcessor.Handshake when the init proof fails
+var ErrInitProofFailed = errors.New("init proof failed")
+
+// ErrFinalProofFailed returned from HandshakeProcessor.Handshake when the final proof fails
+var ErrFinalProofFailed = errors.New("final proof failed")
+
+// ErrOtherNodeNotVerified returned from HandshakeProcessor.Handshake when the connected node
+// is not part of the KEM table nor can it be verified via signature
+var ErrOtherNodeNotVerified = errors.New("other node not verified")
 
 const NoPhase = packets.PacketType(129)
 const Init2APhase = packets.PacketType(133)
 const Init2BPhase = packets.PacketType(135)
-const Init2ABPhase = packets.PacketType(137)
 
 // HandshakeProcessor provides a generic handshake processor for packets.PacketMarshal
 type HandshakeProcessor interface {
@@ -32,17 +42,6 @@ type HandshakeProcessor interface {
 	SetKnownKEMTable(config.KemTableConfig) HandshakeProcessor
 	GetLocalSecret() []byte
 	GetRemoteSecret() []byte
-	/*
-		// SetNodeSecret sets the secret of the current node; localHandshake corresponds to GetLocalSecret while remoteHandshake corresponds to GetRemoteSecret
-		// Can only be modified before a handshake; calls are ignored after.
-		SetNodeSecret(secret []byte) HandshakeProcessor
-	*/
-	/*
-		GetConnectionUUID() [16]byte
-		SetConnectionUUID(uuid [16]byte) HandshakeProcessor
-		GetValidDuration() time.Duration
-		SetValidDuration(duration time.Duration) HandshakeProcessor
-	*/
 }
 
 type sendItem struct {

@@ -23,9 +23,13 @@ type KemTableConfig interface {
 	Import(publicKeyData []byte, remoteKey bool) error
 	Add(publicKey crypto.KemPublicKey, remoteKey bool) error
 	Clear()
-	FindFromHash(publicKeyData []byte) (crypto.KemPublicKey, error)
+	// FindFromHash of the public key data
+	FindFromHash(hash []byte) (crypto.KemPublicKey, error)
+	// Find the key from public key data
 	Find(publicKeyData []byte) (crypto.KemPublicKey, error)
+	// SetRemoteKeyData also allows nil / len(0) byte slice to clear
 	SetRemoteKeyData(remotePublicKeyData []byte) error
+	// SetRemoteKey also allows nil to clear
 	SetRemoteKey(publicKey crypto.KemPublicKey) error
 	GetRemoteKey() (crypto.KemPublicKey, error)
 }

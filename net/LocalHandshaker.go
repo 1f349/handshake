@@ -4,6 +4,7 @@ package net
 
 import (
 	"crypto/hmac"
+	"crypto/subtle"
 	"errors"
 	"github.com/1f349/handshake/crypto"
 	"github.com/1f349/handshake/net/config"
@@ -28,10 +29,6 @@ func NewLocalHandshakerWithConfig(marshal packets.PacketMarshal, settings *confi
 		verifySignature:  sigVerifierTable,
 		kemTable:         knownKEMTable,
 		errorChannel:     make(chan error, 1),
-		/*
-			connID:           packets.GetUUID(),
-			validDuration:    time.Second * 10,
-		*/
 	}
 }
 
@@ -50,39 +47,7 @@ type localHandshake struct {
 	localSecret      []byte
 	remoteSecret     []byte
 	errorChannel     chan error
-	/*
-		connID           [16]byte
-		validDuration    time.Duration
-	*/
 }
-
-/*
-func (l *localHandshake) GetValidDuration() time.Duration {
-	l.handshakeLock.Lock()
-	defer l.handshakeLock.Unlock()
-	return l.validDuration
-}
-
-func (l *localHandshake) SetValidDuration(duration time.Duration) HandshakeProcessor {
-	l.handshakeLock.Lock()
-	defer l.handshakeLock.Unlock()
-	l.validDuration = duration
-	return l
-}
-
-func (l *localHandshake) GetConnectionUUID() [16]byte {
-	l.handshakeLock.Lock()
-	defer l.handshakeLock.Unlock()
-	return l.connID
-}
-
-func (l *localHandshake) SetConnectionUUID(uuid [16]byte) HandshakeProcessor {
-	l.handshakeLock.Lock()
-	defer l.handshakeLock.Unlock()
-	l.connID = uuid
-	return l
-}
-*/
 
 func (l *localHandshake) GetPacketMarshal() packets.PacketMarshal {
 	l.handshakeLock.Lock()
@@ -107,7 +72,7 @@ func (l *localHandshake) GetLocalSecret() []byte {
 	l.handshakeLock.Lock()
 	defer l.handshakeLock.Unlock()
 	sTR := make([]byte, len(l.localSecret))
-	copy(sTR, l.localSecret)
+	subtle.ConstantTimeCopy(1, sTR, l.localSecret)
 	return sTR
 }
 
@@ -116,22 +81,9 @@ func (l *localHandshake) GetRemoteSecret() []byte {
 	l.handshakeLock.Lock()
 	defer l.handshakeLock.Unlock()
 	sTR := make([]byte, len(l.remoteSecret))
-	copy(sTR, l.remoteSecret)
+	subtle.ConstantTimeCopy(1, sTR, l.remoteSecret)
 	return sTR
 }
-
-/*
-// SetNodeSecret sets the secret this node uses (Local Secret)
-// Can only be modified before a handshake; calls are ignored after.
-func (l *localHandshake) SetNodeSecret(secret []byte) HandshakeProcessor {
-	l.handshakeLock.Lock()
-	defer l.handshakeLock.Unlock()
-	if l.handshakePhase == packets.ZeroReservedPacketType || l.handshakePhase == packets.InitPacketType {
-		copy(l.localSecret, secret)
-	}
-	return l
-}
-*/
 
 func (l *localHandshake) GetSettings() *config.NodeConfig {
 	return l.settings
@@ -176,6 +128,11 @@ func (l *localHandshake) sendPump() {
 			case l.errorChannel <- err:
 			default:
 			}
+			l.broadcastCancel()
+			select {
+			case l.finishChannel <- false:
+			default:
+			}
 			return
 		}
 		if toSend.header.ID == packets.ConnectionRejectedPacketType || toSend.header.ID == packets.FinalProofPacketType {
@@ -217,13 +174,10 @@ func (l *localHandshake) broadcastCancel() {
 }
 
 func (l *localHandshake) getInitPayload() (*packets.InitPayload, packets.PacketType, error) { // 2
+	// 2(AB) does not exist; 2(A) should be returned first so 2(B) can be returned once the remote key is available
 	var err error
 	pret := packets.InitPacketType
 	p := &packets.InitPayload{}
-	if !l.settings.RequestLocalPublicKey {
-		p.PublicKeyHash = l.settings.GetPublicKeyHash(l.settings.KeyCheckHash()) // 2(B)
-		pret = Init2BPhase
-	}
 	var rpk crypto.KemPublicKey
 	rpk, err = l.kemTable.GetRemoteKey()
 	if err == nil { // 2
@@ -232,14 +186,25 @@ func (l *localHandshake) getInitPayload() (*packets.InitPayload, packets.PacketT
 			return nil, packets.ConnectionRejectedPacketType, err
 		}
 		p.PacketHasher = hmac.New(l.settings.HMACHash, l.localSecret)
-	} else { // 2(A)
-		if pret == packets.InitPacketType {
-			pret = Init2APhase
-		} else {
-			pret = Init2ABPhase
+		if !l.settings.RequestLocalPublicKey { // 2(B)
+			p.PublicKeyHash = l.settings.GetPublicKeyHash(l.settings.KeyCheckHash())
+			pret = Init2BPhase
 		}
+	} else { // 2(A)
+		pret = Init2APhase
 	}
 	return p, pret, nil
+}
+
+func (l *localHandshake) errTerminate(err error) {
+	select {
+	case l.errorChannel <- err:
+	default:
+	}
+	l.sendQueue.Enqueue(sendItem{
+		header:  packets.PacketHeader{ID: packets.ConnectionRejectedPacketType, ConnectionUUID: l.settings.ConnID, Time: time.Now()},
+		payload: &packets.EmptyPayload{},
+	})
 }
 
 func (l *localHandshake) Handshake() error {
@@ -260,50 +225,104 @@ func (l *localHandshake) Handshake() error {
 	}
 	ipp, pktyp, err := l.getInitPayload()
 	if err != nil {
+		l.handshakePhase = NoPhase
 		l.broadcastCancel()
 		return err
 	}
+	go l.sendPump()
+	go l.cancelWaiter()
 	l.handshakePhase = pktyp
 	l.sendQueue.Enqueue(sendItem{
 		header:  packets.PacketHeader{ID: packets.InitPacketType, ConnectionUUID: l.settings.ConnID, Time: time.Now()},
 		payload: ipp,
 	})
-	go l.sendPump()
-	go l.cancelWaiter()
+	var recvKeyPyl *packets.PublicKeyDataPayload
 	for {
 		recvHeader, recvPayload, err := l.marshal.Unmarshal()
 		if err != nil {
-			if errors.Is(err, packets.ErrFragmentReceived) {
+			if errors.Is(err, packets.ErrFragmentReceived) || errors.Is(err, packets.ErrInvalidPacketID) {
 				continue
 			}
-			select {
-			case l.errorChannel <- err:
-			default:
-			}
+			l.errTerminate(err)
 			break
 		}
-		runtime.KeepAlive(recvPayload) //TODO: Remove once used
 		if recvHeader.ConnectionUUID == l.settings.ConnID &&
 			!time.Now().Add(-l.settings.ValidDuration).After(recvHeader.Time) &&
 			!time.Now().Add(l.settings.ValidDuration).Before(recvHeader.Time) {
-			switch recvHeader.ID {
-			case packets.ConnectionRejectedPacketType:
+			if recvHeader.ID == packets.ConnectionRejectedPacketType {
 				select {
 				case l.finishChannel <- false:
 				default:
 				}
 				break
-			case packets.InitProofPacketType:
-			case packets.PublicKeyRequestPacketType:
-			case packets.PublicKeyDataPacketType:
-			case packets.SignatureRequestPacketType:
-			case packets.PublicKeySignedPacketType:
-			case packets.SignaturePublicKeyRequestPacketType:
-			case packets.SignedPacketPublicKeyPacketType:
+			} else if recvHeader.ID == packets.InitProofPacketType {
+				if l.handshakePhase == packets.InitPacketType || l.handshakePhase == packets.PublicKeyDataPacketType ||
+					l.handshakePhase == packets.PublicKeySignedPacketType || l.handshakePhase == packets.SignedPacketPublicKeyPacketType {
+					if lpyl, k := recvPayload.(*packets.InitProofPayload); k {
+						if subtle.ConstantTimeCompare(lpyl.ProofHMAC, ipp.PacketHash) == 1 {
+							l.remoteSecret, err = lpyl.Decapsulate(l.settings.GetPrivateKey())
+							if err == nil {
+								l.sendQueue.Enqueue(sendItem{
+									header:  packets.PacketHeader{ID: packets.FinalProofPacketType, ConnectionUUID: l.settings.ConnID, Time: time.Now()},
+									payload: &packets.FinalProofPayload{ProofHMAC: packets.PacketDataHash(*recvHeader, recvPayload, hmac.New(l.settings.HMACHash, l.remoteSecret))},
+								})
+								break
+							} else {
+								l.errTerminate(ErrInitProofFailed)
+								break
+							}
+						} else {
+							l.errTerminate(ErrInitProofFailed)
+							break
+						}
+					}
+				}
+			} else if recvHeader.ID == packets.PublicKeyRequestPacketType {
+				if l.handshakePhase == packets.InitPacketType || l.handshakePhase == Init2BPhase {
+					l.handshakePhase = packets.PublicKeyDataPacketType
+					l.sendQueue.Enqueue(sendItem{
+						header:  packets.PacketHeader{ID: packets.PublicKeyDataPacketType, ConnectionUUID: l.settings.ConnID, Time: time.Now()},
+						payload: &packets.PublicKeyDataPayload{Data: l.settings.GetPublicKeyData()},
+					})
+				}
+			} else if recvHeader.ID == packets.PublicKeyDataPacketType {
+				if l.handshakePhase == Init2APhase {
+					if lpyl, k := recvPayload.(*packets.PublicKeyDataPayload); k {
+						recvKeyPyl = lpyl
+						err := l.kemTable.SetRemoteKeyData(lpyl.Data)
+						if err == nil {
+							ipp, pktyp, err = l.getInitPayload()
+							if err == nil {
+								l.handshakePhase = pktyp
+								l.sendQueue.Enqueue(sendItem{
+									header:  packets.PacketHeader{ID: packets.InitPacketType, ConnectionUUID: l.settings.ConnID, Time: time.Now()},
+									payload: ipp,
+								})
+							} else {
+								l.errTerminate(err)
+								break
+							}
+						} else {
+							l.handshakePhase = packets.SignatureRequestPacketType
+							l.sendQueue.Enqueue(sendItem{
+								header:  packets.PacketHeader{ID: packets.SignatureRequestPacketType, ConnectionUUID: l.settings.ConnID, Time: time.Now()},
+								payload: &packets.EmptyPayload{},
+							})
+						}
+					}
+				}
+			} else if recvHeader.ID == packets.SignatureRequestPacketType {
+				//TODO : Implement me
+			} else if recvHeader.ID == packets.PublicKeySignedPacketType {
+				//TODO : Implement me
+			} else if recvHeader.ID == packets.SignaturePublicKeyRequestPacketType {
+				//TODO : Implement me
+			} else if recvHeader.ID == packets.SignedPacketPublicKeyPacketType {
 				//TODO : Implement me
 			}
 		}
 	}
+	runtime.KeepAlive(recvKeyPyl) // TODO: Remove once used
 	defer l.broadcastCancel()
 	select {
 	case err := <-l.errorChannel:

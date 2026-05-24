@@ -13,7 +13,9 @@ type SigVerifierTableConfig interface {
 	Import(publicKeyData []byte) error
 	Add(publicKey crypto.SigPublicKey) error
 	Clear()
-	FindFromHash(publicKeyData []byte) (crypto.SigPublicKey, error)
+	// FindFromHash of the public key data
+	FindFromHash(hash []byte) (crypto.SigPublicKey, error)
+	// Find the key from public key data
 	Find(publicKeyData []byte) (crypto.SigPublicKey, error)
 }
 

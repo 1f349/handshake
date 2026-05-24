@@ -104,7 +104,7 @@ Sent as a response to (7).
 
 #### 9) Signature Public Key Request
 
-Sent as a response to (8) if the Signing Public Key is not found or multi-matched.
+Sent as a response to (8) if the Signing Public Key is multi-matched.
 
 #### 10) Signed Packet Public Key
 ([] Public Key for Signature)
