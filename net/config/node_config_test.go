@@ -92,4 +92,16 @@ func TestNodeConfig_Key(t *testing.T) {
 	t.Run("GetPublicKeyHash", func(t *testing.T) {
 		assert.Equal(t, packets.BinaryMarshalHash(k, hashProv()), ncfg.GetPublicKeyHash(hashProv()))
 	})
+	t.Run("Clone", func(t *testing.T) {
+		cncfg := ncfg.Clone()
+		assert.True(t, cncfg.Valid())
+		cncfg.ValidDuration = time.Second
+		assert.NotEqual(t, cncfg.ValidDuration, ncfg.ValidDuration)
+		assert.Equal(t, time.Millisecond, ncfg.ValidDuration)
+		assert.Equal(t, time.Second, cncfg.ValidDuration)
+		assert.True(t, kp.Equals(cncfg.GetPrivateKey()))
+		assert.True(t, k.Equals(cncfg.GetPrivateKey().Public()))
+		assert.True(t, ncfg.GetPrivateKey().Equals(ncfg.GetPrivateKey()))
+		assert.True(t, ncfg.GetPrivateKey().Public().Equals(ncfg.GetPrivateKey().Public()))
+	})
 }

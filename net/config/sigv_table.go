@@ -17,18 +17,30 @@ type SigVerifierTableConfig interface {
 	FindFromHash(hash []byte) (crypto.SigPublicKey, error)
 	// Find the key from public key data
 	Find(publicKeyData []byte) (crypto.SigPublicKey, error)
+	Clone() SigVerifierTableConfig
 }
 
 // NewSigVerifierTableConfig with the specified SigScheme and hashProvider for public key data processing
 func NewSigVerifierTableConfig(schema crypto.SigScheme, hashProvider func() hash.Hash) SigVerifierTableConfig {
-	return &sigVerifierTableConfig{schema: schema, store: make(map[string]*crypto.SigPublicKey), hash: hashProvider()}
+	return &sigVerifierTableConfig{schema: schema, store: make(map[string]*crypto.SigPublicKey), hash: hashProvider(), hashProvider: hashProvider}
 }
 
 type sigVerifierTableConfig struct {
-	hash   hash.Hash
-	schema crypto.SigScheme
-	lock   sync.RWMutex
-	store  map[string]*crypto.SigPublicKey
+	hash         hash.Hash
+	hashProvider func() hash.Hash
+	schema       crypto.SigScheme
+	lock         sync.RWMutex
+	store        map[string]*crypto.SigPublicKey
+}
+
+func (k *sigVerifierTableConfig) Clone() SigVerifierTableConfig {
+	k.lock.RLock()
+	defer k.lock.RUnlock()
+	ntbl := &sigVerifierTableConfig{schema: k.schema, store: make(map[string]*crypto.SigPublicKey), hash: k.hashProvider(), hashProvider: k.hashProvider}
+	for k, v := range k.store {
+		ntbl.store[k] = v
+	}
+	return ntbl
 }
 
 func (k *sigVerifierTableConfig) add(publicKey crypto.SigPublicKey, publicKeyData []byte) {

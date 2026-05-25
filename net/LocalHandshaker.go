@@ -179,7 +179,7 @@ func (l *localHandshake) getInitPayload() (*packets.InitPayload, packets.PacketT
 	pret := packets.InitPacketType
 	p := &packets.InitPayload{}
 	var rpk crypto.KemPublicKey
-	rpk, err = l.kemTable.GetRemoteKey()
+	rpk, err = l.kemTable.GetRemoteKey(l.settings.ConnID)
 	if err == nil { // 2
 		l.localSecret, err = p.Encapsulate(rpk)
 		if err != nil {
@@ -289,7 +289,7 @@ func (l *localHandshake) Handshake() error {
 				if l.handshakePhase == Init2APhase {
 					if lpyl, k := recvPayload.(*packets.PublicKeyDataPayload); k {
 						recvKeyPyl = lpyl
-						err := l.kemTable.SetRemoteKeyData(lpyl.Data)
+						err := l.kemTable.SetRemoteKeyData(lpyl.Data, l.settings.ConnID)
 						if err == nil {
 							ipp, pktyp, err = l.getInitPayload()
 							if err == nil {

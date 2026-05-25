@@ -24,6 +24,20 @@ type NodeConfig struct {
 	ConnID                [16]byte
 }
 
+func (nc *NodeConfig) Clone() *NodeConfig {
+	nPKD := make([]byte, len(nc.KEMPrivateKeyData))
+	copy(nPKD, nc.KEMPrivateKeyData)
+	return &NodeConfig{
+		KEM:                   nc.KEM,
+		HMACHash:              nc.HMACHash,
+		KeyCheckHash:          nc.KeyCheckHash,
+		KEMPrivateKeyData:     nPKD,
+		RequestLocalPublicKey: nc.RequestLocalPublicKey,
+		ValidDuration:         nc.ValidDuration,
+		ConnID:                nc.ConnID,
+	}
+}
+
 func (nc *NodeConfig) SetPrivateKey(kemPrivateKey crypto.KemPrivateKey) (err error) {
 	if kemPrivateKey != nil {
 		nc.KEMPrivateKeyData, err = kemPrivateKey.MarshalBinary()

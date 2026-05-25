@@ -61,6 +61,7 @@ func NewSigData(publicEKey []byte, issueTime, expiryTime time.Time, hash hash.Ha
 	}
 }
 
+// UnmarshalSigData un-marshals SigData from the specified data byte slice for the specified signed EKey
 func UnmarshalSigData(data, publicEKey []byte) (*SigData, error) {
 	sd := &SigData{PublicKey: publicEKey}
 	err := sd.UnmarshalBinary(data)
@@ -69,12 +70,14 @@ func UnmarshalSigData(data, publicEKey []byte) (*SigData, error) {
 
 // SigData provides a certificate like verification object for public keys
 type SigData struct {
+	// PublicKey is the key being signed aka an EKey, NOT the key used to sign the signature
 	PublicKey  []byte
 	Signature  []byte
 	IssueTime  time.Time
 	ExpiryTime time.Time
 }
 
+// UnmarshalBinary loads all data (Excluding the PublicKey field) from a byte slice
 func (s *SigData) UnmarshalBinary(data []byte) (err error) {
 	buff := bytes.NewBuffer(data)
 	_, err, sl := intbyteutils.ReadUintFromBytes(buff)
@@ -99,6 +102,7 @@ func (s *SigData) UnmarshalBinary(data []byte) (err error) {
 	return nil
 }
 
+// MarshalBinary saves all data (Excluding the PublicKey field) to a byte slice
 func (s *SigData) MarshalBinary() (data []byte, err error) {
 	buff := bytes.NewBuffer(make([]byte, 0, len(s.Signature)+20))
 	_, err = intbyteutils.WriteUintAsBytes(uint(len(s.Signature)), buff)

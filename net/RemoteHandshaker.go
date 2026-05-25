@@ -253,7 +253,7 @@ func (r *remoteHandshake) Handshake() error {
 						if !lflg {
 							recvKey, err = r.kemTable.FindFromHash(lpyl.PublicKeyHash)
 							if err == nil {
-								err = r.kemTable.SetRemoteKey(recvKey) // Actually local key in this scenario
+								err = r.kemTable.SetRemoteKey(recvKey, r.settings.ConnID) // Actually local key in this scenario
 							}
 							if errors.Is(err, config.ErrNoKey) || errors.Is(err, config.ErrMultipleKeys) {
 								lflg = true
@@ -328,7 +328,7 @@ func (r *remoteHandshake) Handshake() error {
 			} else if recvHeader.ID == packets.PublicKeyDataPacketType {
 				if r.handshakePhase == packets.PublicKeyRequestPacketType {
 					if lpyl, k := recvPayload.(*packets.PublicKeyDataPayload); k {
-						err := r.kemTable.SetRemoteKeyData(lpyl.Data)
+						err := r.kemTable.SetRemoteKeyData(lpyl.Data, r.settings.ConnID)
 						var err2 error
 						recvKey, err2 = lpyl.Load(r.settings.KEM)
 						if err2 == nil {

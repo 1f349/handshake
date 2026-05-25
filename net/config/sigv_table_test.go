@@ -8,33 +8,24 @@ import (
 	"errors"
 	"github.com/1f349/handshake/crypto"
 	"github.com/stretchr/testify/assert"
+	"hash"
 	"testing"
 )
 
-func TestSigTableConfig(t *testing.T) {
-	scheme := crypto.RSASig4096Scheme
-	hashProvider := sha256.New
-	tbl := NewSigVerifierTableConfig(scheme, hashProvider)
-	assert.NotNil(t, tbl)
-	k1, _, k1bts := keySigTest(t, scheme)
-	t.Run("Empty", func(t *testing.T) {
-		t.Run("Clear", func(t *testing.T) {
-			tbl.Clear()
-		})
-	})
+func sigTblTest(t *testing.T, tbl SigVerifierTableConfig, hashProvider func() hash.Hash, k1 crypto.SigPublicKey,
+	k2 crypto.SigPublicKey, k1bts []byte, k2bts []byte, k3bts []byte, k4bts []byte, adding bool) {
 	t.Run("NotEmpty", func(t *testing.T) {
-		k2, _, k2bts := keySigTest(t, scheme)
-		_, _, k3bts := keySigTest(t, scheme)
-		_, _, k4bts := keySigTest(t, scheme)
-		t.Run("Add", func(t *testing.T) {
-			assert.NoError(t, tbl.Add(k1))
-			assert.NoError(t, tbl.Add(k2))
-			assert.NoError(t, tbl.Add(k2))
-		})
-		t.Run("Import", func(t *testing.T) {
-			assert.NoError(t, tbl.Import(k3bts))
-			assert.NoError(t, tbl.Import(k4bts))
-		})
+		if adding {
+			t.Run("Add", func(t *testing.T) {
+				assert.NoError(t, tbl.Add(k1))
+				assert.NoError(t, tbl.Add(k2))
+				assert.NoError(t, tbl.Add(k2))
+			})
+			t.Run("Import", func(t *testing.T) {
+				assert.NoError(t, tbl.Import(k3bts))
+				assert.NoError(t, tbl.Import(k4bts))
+			})
+		}
 		t.Run("Find", func(t *testing.T) {
 			fk, err := tbl.Find(k2bts)
 			assert.NoError(t, err)
@@ -73,6 +64,27 @@ func TestSigTableConfig(t *testing.T) {
 			})
 		})
 	})
+}
+
+func TestSigTableConfig(t *testing.T) {
+	scheme := crypto.RSASig4096Scheme
+	hashProvider := sha256.New
+	tbl := NewSigVerifierTableConfig(scheme, hashProvider)
+	assert.NotNil(t, tbl)
+	k1, _, k1bts := keySigTest(t, scheme)
+	k2, _, k2bts := keySigTest(t, scheme)
+	_, _, k3bts := keySigTest(t, scheme)
+	_, _, k4bts := keySigTest(t, scheme)
+	t.Run("Empty", func(t *testing.T) {
+		t.Run("Clear", func(t *testing.T) {
+			tbl.Clear()
+		})
+	})
+	sigTblTest(t, tbl, hashProvider, k1, k2, k1bts, k2bts, k3bts, k4bts, true)
+	var cloned SigVerifierTableConfig
+	t.Run("Clone", func(t *testing.T) {
+		cloned = tbl.Clone()
+	})
 	t.Run("Cleared", func(t *testing.T) {
 		tbl.Clear()
 		t.Run("Find", func(t *testing.T) {
@@ -92,5 +104,8 @@ func TestSigTableConfig(t *testing.T) {
 				assert.ErrorIs(t, err, ErrNoKey)
 			})
 		})
+	})
+	t.Run("Cloned", func(t *testing.T) {
+		sigTblTest(t, cloned, hashProvider, k1, k2, k1bts, k2bts, k3bts, k4bts, false)
 	})
 }

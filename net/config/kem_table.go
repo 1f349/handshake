@@ -20,77 +20,92 @@ var ErrHashSizeMismatch = errors.New("hash size mismatch")
 
 // KemTableConfig provides a configuration table of known KemPublicKeys
 type KemTableConfig interface {
-	Import(publicKeyData []byte, remoteKey bool) error
-	Add(publicKey crypto.KemPublicKey, remoteKey bool) error
+	Import(publicKeyData []byte, uuidForRemoteKey *[16]byte) error
+	Add(publicKey crypto.KemPublicKey, uuidForRemoteKey *[16]byte) error
 	Clear()
 	// FindFromHash of the public key data
 	FindFromHash(hash []byte) (crypto.KemPublicKey, error)
 	// Find the key from public key data
 	Find(publicKeyData []byte) (crypto.KemPublicKey, error)
 	// SetRemoteKeyData also allows nil / len(0) byte slice to clear
-	SetRemoteKeyData(remotePublicKeyData []byte) error
+	SetRemoteKeyData(remotePublicKeyData []byte, uuid [16]byte) error
 	// SetRemoteKey also allows nil to clear
-	SetRemoteKey(publicKey crypto.KemPublicKey) error
-	GetRemoteKey() (crypto.KemPublicKey, error)
+	SetRemoteKey(publicKey crypto.KemPublicKey, uuid [16]byte) error
+	GetRemoteKey(uuid [16]byte) (crypto.KemPublicKey, error)
+	Clone() KemTableConfig
 }
 
 // NewKemTableConfig with the specified KemScheme and hashProvider for public key data processing
 func NewKemTableConfig(schema crypto.KemScheme, hashProvider func() hash.Hash) KemTableConfig {
-	return &kemTableConfig{schema: schema, store: make(map[string]*crypto.KemPublicKey), hash: hashProvider()}
+	return &kemTableConfig{schema: schema, store: make(map[string]*crypto.KemPublicKey), hash: hashProvider(), hashProvider: hashProvider, remotePublicKeyData: make(map[[16]byte]string)}
 }
 
 type kemTableConfig struct {
 	hash                hash.Hash
+	hashProvider        func() hash.Hash
 	schema              crypto.KemScheme
 	lock                sync.RWMutex
 	store               map[string]*crypto.KemPublicKey
-	remotePublicKeyData string
+	remotePublicKeyData map[[16]byte]string
+}
+
+func (k *kemTableConfig) Clone() KemTableConfig {
+	k.lock.RLock()
+	defer k.lock.RUnlock()
+	ntbl := &kemTableConfig{schema: k.schema, store: make(map[string]*crypto.KemPublicKey), hash: k.hashProvider(), hashProvider: k.hashProvider, remotePublicKeyData: make(map[[16]byte]string)}
+	for k, v := range k.store {
+		ntbl.store[k] = v
+	}
+	for k, v := range k.remotePublicKeyData {
+		ntbl.remotePublicKeyData[k] = v
+	}
+	return ntbl
 }
 
 // SetRemoteKeyData also allows nil / len(0) byte slice to clear
-func (k *kemTableConfig) SetRemoteKeyData(remotePublicKeyData []byte) error {
+func (k *kemTableConfig) SetRemoteKeyData(remotePublicKeyData []byte, uuid [16]byte) error {
 	k.lock.Lock()
 	defer k.lock.Unlock()
 	if len(remotePublicKeyData) == 0 {
-		k.remotePublicKeyData = ""
+		k.remotePublicKeyData[uuid] = ""
 		return nil
 	}
-	if string(remotePublicKeyData) == k.remotePublicKeyData {
+	if string(remotePublicKeyData) == k.remotePublicKeyData[uuid] {
 		return nil
 	}
 	if _, found := k.store[string(remotePublicKeyData)]; !found {
 		return ErrNoKey
 	}
-	k.remotePublicKeyData = string(remotePublicKeyData)
+	k.remotePublicKeyData[uuid] = string(remotePublicKeyData)
 	return nil
 }
 
 // SetRemoteKey also allows nil to clear
-func (k *kemTableConfig) SetRemoteKey(publicKey crypto.KemPublicKey) error {
+func (k *kemTableConfig) SetRemoteKey(publicKey crypto.KemPublicKey, uuid [16]byte) error {
 	if publicKey == nil {
 		k.lock.Lock()
 		defer k.lock.Unlock()
-		k.remotePublicKeyData = ""
+		k.remotePublicKeyData[uuid] = ""
 		return nil
 	}
 	remotePublicKeyData, err := publicKey.MarshalBinary()
 	if err != nil {
 		return err
 	}
-	return k.SetRemoteKeyData(remotePublicKeyData)
+	return k.SetRemoteKeyData(remotePublicKeyData, uuid)
 }
 
-func (k *kemTableConfig) GetRemoteKey() (crypto.KemPublicKey, error) {
+func (k *kemTableConfig) GetRemoteKey(uuid [16]byte) (crypto.KemPublicKey, error) {
 	k.lock.RLock()
 	defer k.lock.RUnlock()
-	if fk, found := k.store[k.remotePublicKeyData]; found && fk != nil {
+	if fk, found := k.store[k.remotePublicKeyData[uuid]]; found && fk != nil {
 		return *fk, nil
 	} else {
 		return nil, ErrNoKey
 	}
 }
 
-func (k *kemTableConfig) add(publicKey crypto.KemPublicKey, publicKeyData []byte, remoteKey bool) {
+func (k *kemTableConfig) add(publicKey crypto.KemPublicKey, publicKeyData []byte, uuidForRemoteKey *[16]byte) {
 	k.lock.Lock()
 	defer k.lock.Unlock()
 	hsh := crypto.HashBytes(publicKeyData, k.hash)
@@ -103,26 +118,26 @@ func (k *kemTableConfig) add(publicKey crypto.KemPublicKey, publicKeyData []byte
 		k.store[string(hsh)] = &publicKey
 	}
 	k.store[string(publicKeyData)] = &publicKey
-	if remoteKey {
-		k.remotePublicKeyData = string(publicKeyData)
+	if uuidForRemoteKey != nil {
+		k.remotePublicKeyData[*uuidForRemoteKey] = string(publicKeyData)
 	}
 }
 
-func (k *kemTableConfig) Import(publicKeyData []byte, remoteKey bool) error {
+func (k *kemTableConfig) Import(publicKeyData []byte, uuidForRemoteKey *[16]byte) error {
 	pk, err := k.schema.UnmarshalBinaryPublicKey(publicKeyData)
 	if err != nil {
 		return err
 	}
-	k.add(pk, publicKeyData, remoteKey)
+	k.add(pk, publicKeyData, uuidForRemoteKey)
 	return nil
 }
 
-func (k *kemTableConfig) Add(publicKey crypto.KemPublicKey, remoteKey bool) error {
+func (k *kemTableConfig) Add(publicKey crypto.KemPublicKey, uuidForRemoteKey *[16]byte) error {
 	pk, err := publicKey.MarshalBinary()
 	if err != nil {
 		return err
 	}
-	k.add(publicKey, pk, remoteKey)
+	k.add(publicKey, pk, uuidForRemoteKey)
 	return nil
 }
 
@@ -130,7 +145,7 @@ func (k *kemTableConfig) Clear() {
 	k.lock.Lock()
 	defer k.lock.Unlock()
 	k.store = make(map[string]*crypto.KemPublicKey)
-	k.remotePublicKeyData = ""
+	k.remotePublicKeyData = make(map[[16]byte]string)
 }
 
 // FindFromHash of the public key data
