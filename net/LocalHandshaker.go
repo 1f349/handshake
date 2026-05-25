@@ -250,7 +250,8 @@ func (l *localHandshake) Handshake() error {
 		payload: ipp,
 	})
 	var recvKeyBts []byte
-	var sigDataPyl *packets.PublicKeySignedPacketPayload // TODO: Needed for stored hash...
+	var sigData *crypto.SigData
+	var sigDataPyl *packets.PublicKeySignedPacketPayload
 	for {
 		recvHeader, recvPayload, err := l.marshal.Unmarshal()
 		if err != nil {
@@ -344,7 +345,7 @@ func (l *localHandshake) Handshake() error {
 						sigDataPyl = lpyl
 						rk, err := l.verifySignature.FindFromHash(lpyl.SigPubKeyHash)
 						if err == nil {
-							sigData, err := lpyl.LoadUsingData(recvKeyBts)
+							sigData, err = lpyl.LoadUsingData(recvKeyBts)
 							if err == nil {
 								if sigData.Verify(l.sigVerifierHashProvider(), rk) {
 									err = l.kemTable.Import(recvKeyBts, &l.settings.ConnID)
@@ -402,35 +403,33 @@ func (l *localHandshake) Handshake() error {
 				}
 			} else if recvHeader.ID == packets.SignedPacketPublicKeyPacketType {
 				if l.handshakePhase == packets.SignaturePublicKeyRequestPacketType {
-					if lpyl, k := recvPayload.(*packets.SignedPacketPublicKeyPayload); k && sigDataPyl != nil {
+					if lpyl, k := recvPayload.(*packets.SignedPacketPublicKeyPayload); k && sigDataPyl != nil && sigData != nil {
+						if subtle.ConstantTimeCompare(crypto.HashBytes(lpyl.Data, l.settings.KeyCheckHash()), sigDataPyl.SigPubKeyHash) == 0 {
+							l.errTerminate(ErrOtherNodeNotVerified)
+							break
+						}
 						rk, err := l.verifySignature.Find(lpyl.Data)
 						if err == nil {
-							sigData, err := sigDataPyl.LoadUsingData(recvKeyBts)
-							if err == nil {
-								if sigData.Verify(l.sigVerifierHashProvider(), rk) {
-									err = l.kemTable.Import(recvKeyBts, &l.settings.ConnID)
+							if sigData.Verify(l.sigVerifierHashProvider(), rk) {
+								err = l.kemTable.Import(recvKeyBts, &l.settings.ConnID)
+								if err == nil {
+									ipp, pktyp, err = l.getInitPayload()
 									if err == nil {
-										ipp, pktyp, err = l.getInitPayload()
-										if err == nil {
-											l.handshakePhase = pktyp
-											l.sendQueue.Enqueue(sendItem{
-												header:  packets.PacketHeader{ID: packets.InitPacketType, ConnectionUUID: l.settings.ConnID, Time: time.Now()},
-												payload: ipp,
-											})
-										} else {
-											l.errTerminate(err)
-											break
-										}
+										l.handshakePhase = pktyp
+										l.sendQueue.Enqueue(sendItem{
+											header:  packets.PacketHeader{ID: packets.InitPacketType, ConnectionUUID: l.settings.ConnID, Time: time.Now()},
+											payload: ipp,
+										})
 									} else {
 										l.errTerminate(err)
 										break
 									}
 								} else {
-									l.errTerminate(ErrOtherNodeNotVerified)
+									l.errTerminate(err)
 									break
 								}
 							} else {
-								l.errTerminate(err)
+								l.errTerminate(ErrOtherNodeNotVerified)
 								break
 							}
 						} else {

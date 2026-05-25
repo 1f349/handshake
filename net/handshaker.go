@@ -24,8 +24,6 @@ var ErrOtherNodeNotVerified = errors.New("other node not verified")
 // ErrNoSignatureToPresent when there is no signature to present to the other node when requested
 var ErrNoSignatureToPresent = errors.New("no signature to present")
 
-// TODO: Both handshakers need to validate requested public keys against their hashes where possible
-
 const NoPhase = packets.PacketType(129)
 const Init2APhase = packets.PacketType(133)
 const Init2BPhase = packets.PacketType(135)

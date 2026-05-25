@@ -236,11 +236,12 @@ func (r *remoteHandshake) Handshake() error {
 	go r.sendPump()
 	go r.cancelWaiter()
 	var recvKey crypto.KemPublicKey
+	var recvKeyHash []byte
 	var initHeader *packets.PacketHeader
 	var initPyl *packets.InitPayload
 	var initProofPyl *packets.InitProofPayload
 	var sigData *crypto.SigData
-	var sigDataPyl *packets.PublicKeySignedPacketPayload // TODO: Needed for stored hash...
+	var sigDataPyl *packets.PublicKeySignedPacketPayload
 	for {
 		recvHeader, recvPayload, err := r.marshal.Unmarshal()
 		if err != nil {
@@ -266,8 +267,10 @@ func (r *remoteHandshake) Handshake() error {
 						initHeader = recvHeader
 						initPyl = lpyl
 						r.localSecret, err = lpyl.Decapsulate(r.settings.GetPrivateKey())
+						if len(lpyl.PublicKeyHash) > 0 {
+							recvKeyHash = lpyl.PublicKeyHash
+						}
 						if err == nil { // 2/(B)
-							// TODO: In future, store hash if available
 							lflg := r.settings.RequestLocalPublicKey || len(lpyl.PublicKeyHash) == 0
 							if !lflg {
 								recvKey, err = r.kemTable.FindFromHash(lpyl.PublicKeyHash)
@@ -300,7 +303,6 @@ func (r *remoteHandshake) Handshake() error {
 								}
 							}
 						} else if errors.Is(err, packets.ErrNoEncapsulation) { // 2(A)
-							// TODO: In future, store hash if available
 							r.handshakePhase = packets.PublicKeyDataPacketType
 							r.sendQueue.Enqueue(sendItem{
 								header:  packets.PacketHeader{ID: packets.PublicKeyDataPacketType, ConnectionUUID: r.settings.ConnID, Time: time.Now()},
@@ -349,6 +351,10 @@ func (r *remoteHandshake) Handshake() error {
 			} else if recvHeader.ID == packets.PublicKeyDataPacketType {
 				if r.handshakePhase == packets.PublicKeyRequestPacketType {
 					if lpyl, k := recvPayload.(*packets.PublicKeyDataPayload); k && initHeader != nil {
+						if subtle.ConstantTimeCompare(crypto.HashBytes(lpyl.Data, r.settings.KeyCheckHash()), recvKeyHash) == 0 {
+							r.errTerminate(ErrOtherNodeNotVerified)
+							break
+						}
 						err := r.kemTable.SetRemoteKeyData(lpyl.Data, r.settings.ConnID)
 						var err2 error
 						recvKey, err2 = lpyl.Load(r.settings.KEM)
@@ -454,6 +460,10 @@ func (r *remoteHandshake) Handshake() error {
 			} else if recvHeader.ID == packets.SignedPacketPublicKeyPacketType {
 				if r.handshakePhase == packets.SignaturePublicKeyRequestPacketType {
 					if lpyl, k := recvPayload.(*packets.SignedPacketPublicKeyPayload); k && sigDataPyl != nil && initHeader != nil && sigData != nil {
+						if subtle.ConstantTimeCompare(crypto.HashBytes(lpyl.Data, r.settings.KeyCheckHash()), sigDataPyl.SigPubKeyHash) == 0 {
+							r.errTerminate(ErrOtherNodeNotVerified)
+							break
+						}
 						rk, err := r.verifySignature.Find(lpyl.Data)
 						if err == nil {
 							if sigData.Verify(r.sigVerifierHashProvider(), rk) {
