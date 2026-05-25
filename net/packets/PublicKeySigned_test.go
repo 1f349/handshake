@@ -81,6 +81,14 @@ func TestValidPublicKeySignedPacketPayload(t *testing.T) {
 	if sigData.Signature != nil {
 		assert.True(t, sigData.Verify(sha256.New(), validPublicKeySignedPacketPayloadSigPubKey))
 	}
+	validPublicKeySignedPacketPayloadKemPubKeyBts, err2 := validPublicKeySignedPacketPayloadKemPubKey.MarshalBinary()
+	assert.NoError(t, err2)
+	sigData, err = rPayload.LoadUsingData(validPublicKeySignedPacketPayloadKemPubKeyBts)
+	assert.NoError(t, err)
+	assert.NotNil(t, sigData.Signature)
+	if sigData.Signature != nil {
+		assert.True(t, sigData.Verify(sha256.New(), validPublicKeySignedPacketPayloadSigPubKey))
+	}
 }
 
 func TestInvalidPublicKeySignedPacketPayload(t *testing.T) {
@@ -96,6 +104,12 @@ func TestInvalidPublicKeySignedPacketPayload(t *testing.T) {
 	assert.GreaterOrEqual(t, n, int64(0))
 	assert.Equal(t, payload.Size(), uint(n))
 	sigData, err := rPayload.Load(validPublicKeySignedPacketPayloadKemPubKey)
+	assert.True(t, slices.Equal([]byte{0, 1, 2, 3}, rPayload.SigPubKeyHash))
+	assert.Error(t, err)
+	assert.Nil(t, sigData.Signature)
+	validPublicKeySignedPacketPayloadKemPubKeyBts, err2 := validPublicKeySignedPacketPayloadKemPubKey.MarshalBinary()
+	assert.NoError(t, err2)
+	sigData, err = rPayload.LoadUsingData(validPublicKeySignedPacketPayloadKemPubKeyBts)
 	assert.True(t, slices.Equal([]byte{0, 1, 2, 3}, rPayload.SigPubKeyHash))
 	assert.Error(t, err)
 	assert.Nil(t, sigData.Signature)

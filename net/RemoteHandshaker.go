@@ -239,6 +239,7 @@ func (r *remoteHandshake) Handshake() error {
 	var initHeader *packets.PacketHeader
 	var initPyl *packets.InitPayload
 	var initProofPyl *packets.InitProofPayload
+	var sigData *crypto.SigData
 	var sigDataPyl *packets.PublicKeySignedPacketPayload // TODO: Needed for stored hash...
 	for {
 		recvHeader, recvPayload, err := r.marshal.Unmarshal()
@@ -395,7 +396,7 @@ func (r *remoteHandshake) Handshake() error {
 						sigDataPyl = lpyl
 						rk, err := r.verifySignature.FindFromHash(lpyl.SigPubKeyHash)
 						if err == nil {
-							sigData, err := lpyl.Load(recvKey)
+							sigData, err = lpyl.Load(recvKey)
 							if err == nil {
 								if sigData.Verify(r.sigVerifierHashProvider(), rk) {
 									err = r.kemTable.Add(recvKey, &r.settings.ConnID)
@@ -452,34 +453,28 @@ func (r *remoteHandshake) Handshake() error {
 				}
 			} else if recvHeader.ID == packets.SignedPacketPublicKeyPacketType {
 				if r.handshakePhase == packets.SignaturePublicKeyRequestPacketType {
-					if lpyl, k := recvPayload.(*packets.SignedPacketPublicKeyPayload); k && sigDataPyl != nil && initHeader != nil {
+					if lpyl, k := recvPayload.(*packets.SignedPacketPublicKeyPayload); k && sigDataPyl != nil && initHeader != nil && sigData != nil {
 						rk, err := r.verifySignature.Find(lpyl.Data)
 						if err == nil {
-							sigData, err := sigDataPyl.Load(recvKey)
-							if err == nil {
-								if sigData.Verify(r.sigVerifierHashProvider(), rk) {
-									err = r.kemTable.Add(recvKey, &r.settings.ConnID)
+							if sigData.Verify(r.sigVerifierHashProvider(), rk) {
+								err = r.kemTable.Add(recvKey, &r.settings.ConnID)
+								if err == nil {
+									initProofPyl, err = r.getInitProofPayload(packets.PacketDataHash(*initHeader, initPyl, hmac.New(r.settings.HMACHash, r.localSecret)), recvKey)
 									if err == nil {
-										initProofPyl, err = r.getInitProofPayload(packets.PacketDataHash(*initHeader, initPyl, hmac.New(r.settings.HMACHash, r.localSecret)), recvKey)
-										if err == nil {
-											r.handshakePhase = packets.InitProofPacketType
-											r.sendQueue.Enqueue(sendItem{header: packets.PacketHeader{ID: packets.InitProofPacketType, ConnectionUUID: r.settings.ConnID, Time: time.Now()},
-												payload: initProofPyl,
-											})
-										} else {
-											r.errTerminate(err)
-											break
-										}
+										r.handshakePhase = packets.InitProofPacketType
+										r.sendQueue.Enqueue(sendItem{header: packets.PacketHeader{ID: packets.InitProofPacketType, ConnectionUUID: r.settings.ConnID, Time: time.Now()},
+											payload: initProofPyl,
+										})
 									} else {
 										r.errTerminate(err)
 										break
 									}
 								} else {
-									r.errTerminate(ErrOtherNodeNotVerified)
+									r.errTerminate(err)
 									break
 								}
 							} else {
-								r.errTerminate(err)
+								r.errTerminate(ErrOtherNodeNotVerified)
 								break
 							}
 						} else {

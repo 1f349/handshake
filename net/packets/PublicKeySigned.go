@@ -63,7 +63,11 @@ func (p *PublicKeySignedPacketPayload) Load(kemKeyToCheck crypto.KemPublicKey) (
 	return p.signature, err
 }
 
-// TODO: Support a version of this function that takes the crypto.KemPublicKey directly ^
+func (p *PublicKeySignedPacketPayload) LoadUsingData(kemData []byte) (*crypto.SigData, error) {
+	var err error
+	p.signature, err = crypto.UnmarshalSigData(p.SignatureData, kemData)
+	return p.signature, err
+}
 
 func (p *PublicKeySignedPacketPayload) Save(sigData *crypto.SigData) (err error) {
 	if sigData == nil {

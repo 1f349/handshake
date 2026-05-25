@@ -128,6 +128,27 @@ func sharedPacketMarshalTest(t *testing.T, transport io.ReadWriter, mtu uint) {
 		return err != nil && sigData.Signature == nil
 	})
 
+	validPublicKeySignedPacketPayloadKemPubKeyBts, err := validPublicKeySignedPacketPayloadKemPubKey.MarshalBinary()
+	assert.NoError(t, err)
+
+	testOnePayload(t, "PublicKeySignedPacketType_Valid_LoadUsingData", marshal, PacketHeader{ID: PublicKeySignedPacketType, ConnectionUUID: connection, Time: pt}, GetValidPublicKeySignedPacketPayload(), func(o PacketPayload, r PacketPayload) bool {
+		if !slices.Equal(validPublicKeySignedPacketPayloadSigPubKeyHash, r.(*PublicKeySignedPacketPayload).SigPubKeyHash) {
+			return false
+		}
+		sigData, err := r.(*PublicKeySignedPacketPayload).LoadUsingData(validPublicKeySignedPacketPayloadKemPubKeyBts)
+		if err != nil || sigData.Signature == nil {
+			return false
+		}
+		return sigData.Verify(sha256.New(), validPublicKeySignedPacketPayloadSigPubKey)
+	})
+	testOnePayload(t, "PublicKeySignedPacketType_Invalid_LoadUsingData", marshal, PacketHeader{ID: PublicKeySignedPacketType, ConnectionUUID: connection, Time: pt}, GetInvalidPublicKeySignedPacketPayload(), func(o PacketPayload, r PacketPayload) bool {
+		if !slices.Equal([]byte{0, 1, 2, 3}, r.(*PublicKeySignedPacketPayload).SigPubKeyHash) {
+			return false
+		}
+		sigData, err := r.(*PublicKeySignedPacketPayload).LoadUsingData(validPublicKeySignedPacketPayloadKemPubKeyBts)
+		return err != nil && sigData.Signature == nil
+	})
+
 	testOnePayload(t, "InitPacketType_Valid2", marshal, PacketHeader{ID: InitPacketType, ConnectionUUID: connection, Time: pt}, GetInitPayload(initTestValid2), func(o PacketPayload, r PacketPayload) bool {
 		cs, err := r.(*InitPayload).Decapsulate(GetInitKey(initTestValid2))
 		assert.NoError(t, err)

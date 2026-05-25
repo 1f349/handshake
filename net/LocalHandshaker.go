@@ -249,7 +249,7 @@ func (l *localHandshake) Handshake() error {
 		header:  packets.PacketHeader{ID: packets.InitPacketType, ConnectionUUID: l.settings.ConnID, Time: time.Now()},
 		payload: ipp,
 	})
-	var recvKey crypto.KemPublicKey
+	var recvKeyBts []byte
 	var sigDataPyl *packets.PublicKeySignedPacketPayload // TODO: Needed for stored hash...
 	for {
 		recvHeader, recvPayload, err := l.marshal.Unmarshal()
@@ -302,11 +302,7 @@ func (l *localHandshake) Handshake() error {
 			} else if recvHeader.ID == packets.PublicKeyDataPacketType {
 				if l.handshakePhase == Init2APhase {
 					if lpyl, k := recvPayload.(*packets.PublicKeyDataPayload); k {
-						recvKey, err = lpyl.Load(l.settings.KEM)
-						if err != nil {
-							l.errTerminate(err)
-							break
-						}
+						recvKeyBts = lpyl.Data
 						err = l.kemTable.SetRemoteKeyData(lpyl.Data, l.settings.ConnID)
 						if err == nil {
 							ipp, pktyp, err = l.getInitPayload()
@@ -348,10 +344,10 @@ func (l *localHandshake) Handshake() error {
 						sigDataPyl = lpyl
 						rk, err := l.verifySignature.FindFromHash(lpyl.SigPubKeyHash)
 						if err == nil {
-							sigData, err := lpyl.Load(recvKey)
+							sigData, err := lpyl.LoadUsingData(recvKeyBts)
 							if err == nil {
 								if sigData.Verify(l.sigVerifierHashProvider(), rk) {
-									err = l.kemTable.Add(recvKey, &l.settings.ConnID)
+									err = l.kemTable.Import(recvKeyBts, &l.settings.ConnID)
 									if err == nil {
 										ipp, pktyp, err = l.getInitPayload()
 										if err == nil {
@@ -409,10 +405,10 @@ func (l *localHandshake) Handshake() error {
 					if lpyl, k := recvPayload.(*packets.SignedPacketPublicKeyPayload); k && sigDataPyl != nil {
 						rk, err := l.verifySignature.Find(lpyl.Data)
 						if err == nil {
-							sigData, err := sigDataPyl.Load(recvKey)
+							sigData, err := sigDataPyl.LoadUsingData(recvKeyBts)
 							if err == nil {
 								if sigData.Verify(l.sigVerifierHashProvider(), rk) {
-									err = l.kemTable.Add(recvKey, &l.settings.ConnID)
+									err = l.kemTable.Import(recvKeyBts, &l.settings.ConnID)
 									if err == nil {
 										ipp, pktyp, err = l.getInitPayload()
 										if err == nil {
