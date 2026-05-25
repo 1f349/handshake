@@ -10,43 +10,56 @@ import (
 	"github.com/1f349/handshake/net/config"
 	"github.com/1f349/handshake/net/packets"
 	"github.com/1f349/queue"
-	"runtime"
+	"hash"
 	"sync"
 	"time"
 )
 
-func NewLocalHandshakerWithConfig(marshal packets.PacketMarshal, settings *config.NodeConfig, presentedSig *config.SigConfig, sigVerifierTable config.SigVerifierTableConfig, knownKEMTable config.KemTableConfig) HandshakeProcessor {
+func NewLocalHandshakerWithConfig(marshal packets.PacketMarshal, settings *config.NodeConfig, presentedSig *config.SigConfig,
+	sigVerifierTable config.SigVerifierTableConfig, sigVerifierHashProvider func() hash.Hash, knownKEMTable config.KemTableConfig) HandshakeProcessor {
 	return &localHandshake{
-		marshal:          marshal,
-		finishChannel:    make(chan bool),
-		cancelledChannel: make(chan struct{}),
-		cancelWaitCond:   sync.NewCond(&sync.Mutex{}),
-		sendQueue:        queue.NewQueue[sendItem](),
-		handshakeLock:    &sync.Mutex{},
-		handshakePhase:   NoPhase,
-		settings:         settings,
-		presentSignature: presentedSig,
-		verifySignature:  sigVerifierTable,
-		kemTable:         knownKEMTable,
-		errorChannel:     make(chan error, 1),
+		marshal:                 marshal,
+		finishChannel:           make(chan bool),
+		cancelledChannel:        make(chan struct{}),
+		cancelWaitCond:          sync.NewCond(&sync.Mutex{}),
+		sendQueue:               queue.NewQueue[sendItem](),
+		handshakeLock:           &sync.Mutex{},
+		handshakePhase:          NoPhase,
+		settings:                settings,
+		presentSignature:        presentedSig,
+		verifySignature:         sigVerifierTable,
+		kemTable:                knownKEMTable,
+		errorChannel:            make(chan error, 1),
+		sigVerifierHashProvider: sigVerifierHashProvider,
 	}
 }
 
 type localHandshake struct {
-	marshal          packets.PacketMarshal
-	settings         *config.NodeConfig
-	presentSignature *config.SigConfig
-	verifySignature  config.SigVerifierTableConfig
-	kemTable         config.KemTableConfig
-	finishChannel    chan bool
-	cancelledChannel chan struct{}
-	cancelWaitCond   *sync.Cond
-	sendQueue        queue.Queue[sendItem]
-	handshakeLock    *sync.Mutex
-	handshakePhase   packets.PacketType
-	localSecret      []byte
-	remoteSecret     []byte
-	errorChannel     chan error
+	marshal                 packets.PacketMarshal
+	settings                *config.NodeConfig
+	presentSignature        *config.SigConfig
+	verifySignature         config.SigVerifierTableConfig
+	kemTable                config.KemTableConfig
+	finishChannel           chan bool
+	cancelledChannel        chan struct{}
+	cancelWaitCond          *sync.Cond
+	sendQueue               queue.Queue[sendItem]
+	handshakeLock           *sync.Mutex
+	handshakePhase          packets.PacketType
+	localSecret             []byte
+	remoteSecret            []byte
+	errorChannel            chan error
+	sigVerifierHashProvider func() hash.Hash
+}
+
+func (l *localHandshake) GetSignatureVerifierHashProvider() func() hash.Hash {
+	return l.sigVerifierHashProvider
+}
+
+func (l *localHandshake) SetSignatureVerifierHashProvider(prov func() hash.Hash) {
+	l.handshakeLock.Lock()
+	defer l.handshakeLock.Unlock()
+	l.sigVerifierHashProvider = prov
 }
 
 func (l *localHandshake) GetPacketMarshal() packets.PacketMarshal {
@@ -236,7 +249,8 @@ func (l *localHandshake) Handshake() error {
 		header:  packets.PacketHeader{ID: packets.InitPacketType, ConnectionUUID: l.settings.ConnID, Time: time.Now()},
 		payload: ipp,
 	})
-	var recvKeyPyl *packets.PublicKeyDataPayload
+	var recvKey crypto.KemPublicKey
+	var sigDataPyl *packets.PublicKeySignedPacketPayload // TODO: Needed for stored hash...
 	for {
 		recvHeader, recvPayload, err := l.marshal.Unmarshal()
 		if err != nil {
@@ -288,8 +302,12 @@ func (l *localHandshake) Handshake() error {
 			} else if recvHeader.ID == packets.PublicKeyDataPacketType {
 				if l.handshakePhase == Init2APhase {
 					if lpyl, k := recvPayload.(*packets.PublicKeyDataPayload); k {
-						recvKeyPyl = lpyl
-						err := l.kemTable.SetRemoteKeyData(lpyl.Data, l.settings.ConnID)
+						recvKey, err = lpyl.Load(l.settings.KEM)
+						if err != nil {
+							l.errTerminate(err)
+							break
+						}
+						err = l.kemTable.SetRemoteKeyData(lpyl.Data, l.settings.ConnID)
 						if err == nil {
 							ipp, pktyp, err = l.getInitPayload()
 							if err == nil {
@@ -312,17 +330,126 @@ func (l *localHandshake) Handshake() error {
 					}
 				}
 			} else if recvHeader.ID == packets.SignatureRequestPacketType {
-				//TODO : Implement me
+				if l.handshakePhase == packets.PublicKeyDataPacketType {
+					if l.presentSignature == nil {
+						l.errTerminate(ErrNoSignatureToPresent)
+						break
+					} else {
+						l.handshakePhase = packets.PublicKeySignedPacketType
+						l.sendQueue.Enqueue(sendItem{
+							header:  packets.PacketHeader{ID: packets.PublicKeySignedPacketType, ConnectionUUID: l.settings.ConnID, Time: time.Now()},
+							payload: &packets.PublicKeySignedPacketPayload{SignatureData: l.presentSignature.Data, SigPubKeyHash: l.presentSignature.KeyHash(l.settings.KeyCheckHash())},
+						})
+					}
+				}
 			} else if recvHeader.ID == packets.PublicKeySignedPacketType {
-				//TODO : Implement me
+				if l.handshakePhase == packets.SignatureRequestPacketType {
+					if lpyl, k := recvPayload.(*packets.PublicKeySignedPacketPayload); k {
+						sigDataPyl = lpyl
+						rk, err := l.verifySignature.FindFromHash(lpyl.SigPubKeyHash)
+						if err == nil {
+							sigData, err := lpyl.Load(recvKey)
+							if err == nil {
+								if sigData.Verify(l.sigVerifierHashProvider(), rk) {
+									err = l.kemTable.Add(recvKey, &l.settings.ConnID)
+									if err == nil {
+										ipp, pktyp, err = l.getInitPayload()
+										if err == nil {
+											l.handshakePhase = pktyp
+											l.sendQueue.Enqueue(sendItem{
+												header:  packets.PacketHeader{ID: packets.InitPacketType, ConnectionUUID: l.settings.ConnID, Time: time.Now()},
+												payload: ipp,
+											})
+										} else {
+											l.errTerminate(err)
+											break
+										}
+									} else {
+										l.errTerminate(err)
+										break
+									}
+								} else {
+									l.errTerminate(ErrOtherNodeNotVerified)
+									break
+								}
+							} else {
+								l.errTerminate(err)
+								break
+							}
+						} else if errors.Is(err, config.ErrMultipleKeys) {
+							l.handshakePhase = packets.SignaturePublicKeyRequestPacketType
+							l.sendQueue.Enqueue(sendItem{
+								header:  packets.PacketHeader{ID: packets.SignaturePublicKeyRequestPacketType, ConnectionUUID: l.settings.ConnID, Time: time.Now()},
+								payload: &packets.EmptyPayload{},
+							})
+						} else {
+							l.errTerminate(ErrOtherNodeNotVerified)
+							break
+						}
+					} else {
+						l.errTerminate(ErrOtherNodeNotVerified)
+						break
+					}
+				}
 			} else if recvHeader.ID == packets.SignaturePublicKeyRequestPacketType {
-				//TODO : Implement me
+				if l.handshakePhase == packets.PublicKeySignedPacketType {
+					if l.presentSignature == nil {
+						l.errTerminate(ErrNoSignatureToPresent)
+						break
+					} else {
+						l.handshakePhase = packets.SignedPacketPublicKeyPacketType
+						l.sendQueue.Enqueue(sendItem{
+							header:  packets.PacketHeader{ID: packets.SignedPacketPublicKeyPacketType, ConnectionUUID: l.settings.ConnID, Time: time.Now()},
+							payload: &packets.SignedPacketPublicKeyPayload{Data: l.presentSignature.Key},
+						})
+					}
+				}
 			} else if recvHeader.ID == packets.SignedPacketPublicKeyPacketType {
-				//TODO : Implement me
+				if l.handshakePhase == packets.SignaturePublicKeyRequestPacketType {
+					if lpyl, k := recvPayload.(*packets.SignedPacketPublicKeyPayload); k && sigDataPyl != nil {
+						rk, err := l.verifySignature.Find(lpyl.Data)
+						if err == nil {
+							sigData, err := sigDataPyl.Load(recvKey)
+							if err == nil {
+								if sigData.Verify(l.sigVerifierHashProvider(), rk) {
+									err = l.kemTable.Add(recvKey, &l.settings.ConnID)
+									if err == nil {
+										ipp, pktyp, err = l.getInitPayload()
+										if err == nil {
+											l.handshakePhase = pktyp
+											l.sendQueue.Enqueue(sendItem{
+												header:  packets.PacketHeader{ID: packets.InitPacketType, ConnectionUUID: l.settings.ConnID, Time: time.Now()},
+												payload: ipp,
+											})
+										} else {
+											l.errTerminate(err)
+											break
+										}
+									} else {
+										l.errTerminate(err)
+										break
+									}
+								} else {
+									l.errTerminate(ErrOtherNodeNotVerified)
+									break
+								}
+							} else {
+								l.errTerminate(err)
+								break
+							}
+						} else {
+							l.errTerminate(ErrOtherNodeNotVerified)
+							break
+						}
+					}
+				}
 			}
 		}
 	}
-	runtime.KeepAlive(recvKeyPyl) // TODO: Remove once used
+	select { // Should we?
+	case <-l.cancelledChannel:
+		defer func() { l.cancelledChannel = make(chan struct{}) }()
+	}
 	defer l.broadcastCancel()
 	select {
 	case err := <-l.errorChannel:

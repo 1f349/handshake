@@ -6,6 +6,7 @@ import (
 	"errors"
 	"github.com/1f349/handshake/net/config"
 	"github.com/1f349/handshake/net/packets"
+	"hash"
 )
 
 // var ErrHandshakeDone = errors.New("handshake already done")
@@ -19,6 +20,11 @@ var ErrFinalProofFailed = errors.New("final proof failed")
 // ErrOtherNodeNotVerified returned from HandshakeProcessor.Handshake when the connected node
 // is not part of the KEM table nor can it be verified via signature
 var ErrOtherNodeNotVerified = errors.New("other node not verified")
+
+// ErrNoSignatureToPresent when there is no signature to present to the other node when requested
+var ErrNoSignatureToPresent = errors.New("no signature to present")
+
+// TODO: Both handshakers need to validate requested public keys against their hashes where possible
 
 const NoPhase = packets.PacketType(129)
 const Init2APhase = packets.PacketType(133)
@@ -42,6 +48,8 @@ type HandshakeProcessor interface {
 	SetKnownKEMTable(config.KemTableConfig) HandshakeProcessor
 	GetLocalSecret() []byte
 	GetRemoteSecret() []byte
+	GetSignatureVerifierHashProvider() func() hash.Hash
+	SetSignatureVerifierHashProvider(func() hash.Hash)
 }
 
 type sendItem struct {
