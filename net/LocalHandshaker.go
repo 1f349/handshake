@@ -290,6 +290,9 @@ func (l *localHandshake) Handshake() error {
 							l.errTerminate(ErrInitProofFailed)
 							break
 						}
+					} else {
+						l.errTerminate(ErrInitProofFailed)
+						break
 					}
 				}
 			} else if recvHeader.ID == packets.PublicKeyRequestPacketType {
@@ -324,6 +327,9 @@ func (l *localHandshake) Handshake() error {
 								payload: &packets.EmptyPayload{},
 							})
 						}
+					} else {
+						l.errTerminate(ErrOtherNodeNotVerified)
+						break
 					}
 				}
 			} else if recvHeader.ID == packets.SignatureRequestPacketType {
@@ -436,6 +442,9 @@ func (l *localHandshake) Handshake() error {
 							l.errTerminate(ErrOtherNodeNotVerified)
 							break
 						}
+					} else {
+						l.errTerminate(ErrOtherNodeNotVerified)
+						break
 					}
 				}
 			}

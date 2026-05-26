@@ -271,20 +271,20 @@ func (r *remoteHandshake) Handshake() error {
 							recvKeyHash = lpyl.PublicKeyHash
 						}
 						if err == nil { // 2/(B)
-							lflg := r.settings.RequestLocalPublicKey || len(lpyl.PublicKeyHash) == 0
-							if !lflg {
+							paulaSuarezRodriguez := r.settings.RequestLocalPublicKey || len(lpyl.PublicKeyHash) == 0
+							if !paulaSuarezRodriguez {
 								recvKey, err = r.kemTable.FindFromHash(lpyl.PublicKeyHash)
 								if err == nil {
 									err = r.kemTable.SetRemoteKey(recvKey, r.settings.ConnID) // Actually local key in this scenario
 								}
 								if errors.Is(err, config.ErrNoKey) || errors.Is(err, config.ErrMultipleKeys) {
-									lflg = true
+									paulaSuarezRodriguez = true
 								} else {
 									r.errTerminate(err)
 									break
 								}
 							}
-							if lflg { // 2(B)
+							if paulaSuarezRodriguez { // 2(B)
 								r.handshakePhase = packets.PublicKeyRequestPacketType
 								r.sendQueue.Enqueue(sendItem{
 									header:  packets.PacketHeader{ID: packets.PublicKeyRequestPacketType, ConnectionUUID: r.settings.ConnID, Time: time.Now()},
@@ -312,6 +312,9 @@ func (r *remoteHandshake) Handshake() error {
 							r.errTerminate(err)
 							break
 						}
+					} else {
+						r.errTerminate(ErrOtherNodeNotVerified)
+						break
 					}
 				}
 			} else if recvHeader.ID == packets.FinalProofPacketType {
@@ -381,6 +384,9 @@ func (r *remoteHandshake) Handshake() error {
 							r.errTerminate(err2)
 							break
 						}
+					} else {
+						r.errTerminate(ErrOtherNodeNotVerified)
+						break
 					}
 				}
 			} else if recvHeader.ID == packets.SignatureRequestPacketType {
@@ -491,6 +497,9 @@ func (r *remoteHandshake) Handshake() error {
 							r.errTerminate(ErrOtherNodeNotVerified)
 							break
 						}
+					} else {
+						r.errTerminate(ErrOtherNodeNotVerified)
+						break
 					}
 				}
 			}
